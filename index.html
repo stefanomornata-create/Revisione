@@ -1164,7 +1164,7 @@ const missing=(c,k)=>need(c,k).filter(([m])=>!c[k].got.includes(m));
 function bAct(c,k){
   const b=c[k],bl=blocchi(c)[k],toDue=Math.round((bl.scad-TODAY)/DAY),lbl=k==="770"?"770":"Redditi/IRAP";
   if(!need(c,k).length) return null;
-  if(!b.ric){ if(toDue<=REG.preavviso) return {key:"ric",txt:`Inviare richiesta ${lbl}`,cls:toDue<=REG.richiestaTardi?"crit":"warn"}; return {key:"",txt:"In attesa",cls:"neu",idle:1};}
+  if(!b.ric){ if(c.tipo!=="Diretto") return {key:"",txt:"Richiesta del partner",cls:"neu",idle:1}; if(toDue<=REG.preavviso) return {key:"ric",txt:`Inviare richiesta ${lbl}`,cls:toDue<=REG.richiestaTardi?"crit":"warn"}; return {key:"",txt:"In attesa",cls:"neu",idle:1};}
   if(missing(c,k).length){ if(!b.sol&&days(b.ric)>=REG.sollecito) return {key:"sol",txt:`Sollecitare ${lbl}`,cls:"crit"};
     return {key:"",txt:`Attesa modelli ${lbl}`,cls:toDue<=REG.vicina?"warn":"neu"};}
   if(!b.ver) return {key:"ver",txt:`Verifica ${lbl} da fare`,cls:toDue<=REG.vicina?"crit":"warn"};
@@ -1254,7 +1254,7 @@ function blockUI(c,k){
     :`<input type="checkbox" id="${k}_${key}" data-b="${k}" data-k="${key}" data-t="c" ${b[key]?"checked":""} ${dis?"disabled":""} aria-label="${label}">`}</div>`;
   return `<fieldset><legend>${bl.label}</legend>
     <div class="ro"><span>Scadenza invio</span><b>${dd(bl.scad)}</b></div>
-    ${row("ric","Richiesta inviata","sq","d")}
+    ${c.tipo!=="Diretto"?row("ric",`Richiesta fatta${c.richDa?" da "+esc(c.richDa):" dal partner"}`,"ci","c"):row("ric","Richiesta inviata","sq","d")}
     <div class="srow ${b.ric&&!ms.length?"on":""}"><span class="dot"></span><span class="l">Modelli ricevuti</span><span class="na">${b.ric?(ms.length?ms.length+" mancanti":"tutti"):""}</span></div>
     <div class="mods">${MOD[k].map(([m,l])=>c.nd.includes(m)?`<span class="mod nd">${l}</span>`:`<button type="button" class="mod" data-got="${k}:${m}" aria-pressed="${b.got.includes(m)}" ${b.ric?"":"disabled"}>${l}</button>`).join("")}</div>
     ${row("sol","Sollecito inviato","di","c",!b.ric||!ms.length&&!b.sol)}
@@ -1273,8 +1273,9 @@ function openDrawer(id){
   <label class="chk"><input type="checkbox" id="att" data-att="1" ${c.attiva?"checked":""}> Dichiarativi attivi${c.tipo!=="Diretto"?" ("+c.tipo.toLowerCase()+")":""}</label>
   ${c.attiva?`<fieldset><legend>Cliente</legend>
     <label class="f"><span>Incaricato verifiche</span><select id="coll" data-c="coll">${["",...PERSONE].map(p=>`<option ${c.coll===p?"selected":""}>${p}</option>`).join("")}</select></label>
+    ${c.tipo!=="Diretto"?`<label class="f"><span>Richieste fatte da</span><input type="text" id="richDa" data-c="richDa" value="${esc(c.richDa||"")}" placeholder="${esc(((typeof A==="function"&&A(c.sigla))||{}).esterno||"Partner")}"></label>`:""}
     <div class="f"><span class="na">Modelli non dovuti</span><div class="prof" style="grid-template-columns:1fr">${[...MOD["770"],...MOD.ri].map(([mm,l])=>`<label class="chk"><input type="checkbox" id="nd_${mm}" data-nd="${mm}" ${c.nd.includes(mm)?"checked":""}> ${l}</label>`).join("")}</div></div>
-    <div class="row2">${daRich.length?`<button type="button" class="btn" data-mail="r">Mail richiesta${daRich.length===1?(daRich[0]==="770"?" 770":" Redditi/IRAP"):""}</button>`:""}${daSoll.length?`<button type="button" class="btn ghost" data-mail="s">Mail sollecito</button>`:""}</div>
+    <div class="row2">${daRich.length&&c.tipo==="Diretto"?`<button type="button" class="btn" data-mail="r">Mail richiesta${daRich.length===1?(daRich[0]==="770"?" 770":" Redditi/IRAP"):""}</button>`:""}${daSoll.length?`<button type="button" class="btn ghost" data-mail="s">Mail sollecito</button>`:""}</div>
     ${mailOpen?`<div class="mailbox"><textarea id="mailtxt" readonly>${esc(mailText(c,mailOpen==="r"?daRich:daSoll,mailOpen==="s"))}</textarea><div class="row2"><button type="button" class="btn" data-out="1">Apri in Outlook</button><button type="button" class="btn ghost" data-copy="1">Copia testo</button><span class="na" id="copied"></span></div></div>`:""}
   </fieldset>${blockUI(c,"770")}${blockUI(c,"ri")}`:""}
   <label class="f"><span>Note</span><textarea id="note" rows="2" data-note="1">${esc(c.note)}</textarea></label>`;
