@@ -1981,7 +1981,7 @@ function calc(y){const o={};KEYS.forEach((k,i)=>o[k]=y[i]);
 const SRC_CL=()=>APP.ana.filter(a=>a.sigla&&a.attivo!==false).map(a=>[a.sigla,a.nome,a.tipo]);
 const MKB=(([sigla,nome,tipo])=>{const L=LEADS[sigla];
   if(!L)return {id:sigla,sigla,nome,tipo,miss:true,sig:[{t:"Lead mancante",c:"neu"}]};
-  const [es,st,data,mm]=L.lead,cur=calc(L.y[0]),prv=calc(L.y[1]);
+  const [es,st,data,mm0]=L.lead,mm=String(mm0||"12").length<=2?(String(mm0)==="08"?"31-08":"31-12"):String(mm0),cur=calc(L.y[0]),prv=calc(L.y[1]);
   return {id:sigla,sigla,nome,tipo,es:+es,st,data,mm,cur,prv};});
 let clients=[];
 function signals(c){if(c.miss)return c.sig;const a=c.cur,p=c.prv,s=[];
@@ -1994,7 +1994,7 @@ function signals(c){if(c.miss)return c.sig;const a=c.cur,p=c.prv,s=[];
   return s;}
 function rebuild(){clients=SRC_CL().map(MKB);clients.forEach(c=>c.sig=signals(c));}
 const lvl=c=>c.sig.some(s=>s.c==="crit")?2:c.sig.some(s=>s.c==="warn")?1:0;
-const fileName=c=>`Lead_${c.mm==="08"?"31-08":"31-12"}_${c.sigla}_${String(c.es).slice(2)}_${c.st==="def"?"def":"provv"}`;
+const fileName=c=>`Lead ${c.mm}_${c.sigla} ${String(c.es).slice(2)}${c.st==="def"?" def":""}`;
 const COLS=[["sigla","Sigla",c=>c.sigla],["nome","Società",c=>c.nome],["lead","Lead",c=>c.miss?-1:c.es*10+(c.st==="def"?1:0)],
   ["ric","Ricavi €/000",c=>c.miss?null:c.cur.ric,1],["dric","Δ ricavi",c=>c.miss?null:dlt(c.cur.ric,c.prv.ric),1],["em","EBITDA %",c=>c.miss?null:c.cur.em,1],
   ["ut","Risultato €/000",c=>c.miss?null:c.cur.ut,1],["pn","PN €/000",c=>c.miss?null:c.cur.pn,1],["lev","Debiti/PN",c=>c.miss?null:c.cur.lev,1],["sig","Segnali",c=>lvl(c)*10+c.sig.length]];
@@ -2017,7 +2017,7 @@ function render(){SYNC();rebuild();
     if(c.miss)return `<tr class="miss" data-id="${c.id}"><td><span class="sigla">${c.sigla}</span></td><td>${esc(c.nome)}</td><td><span class="pill neu">mancante</span></td><td class="r">—</td><td class="r">—</td><td class="r">—</td><td class="r">—</td><td class="r">—</td><td class="r">—</td><td></td></tr>`;
     const a=c.cur,dr=dlt(a.ric,c.prv.ric);
     return `<tr data-id="${c.id}"><td><span class="sigla">${c.sigla}</span></td><td>${esc(c.nome)}</td>
-    <td><span class="lead">${c.es}${c.mm==="08"?"·08":""} <span class="pill ${c.st==="def"?"ok":"warn"}">${c.st==="def"?"def":"provv"}</span></span></td>
+    <td><span class="lead">${c.es}${c.mm!=="31-12"?" · "+c.mm.replace("-","/"):""} <span class="pill ${c.st==="def"?"ok":"warn"}">${c.st==="def"?"def":"provv"}</span></span></td>
     <td class="r">${fmtK(a.ric)}</td><td class="r ${dr<=-.15?"dn":""}">${sgn(dr)}</td><td class="r ${a.em<0?"neg":""}">${pct(a.em)}</td>
     <td class="r ${a.ut<0?"neg":""}">${fmtK(a.ut)}</td><td class="r ${a.pn<0?"neg":""}">${fmtK(a.pn)}</td><td class="r">${num(a.lev,1)}</td>
     <td><div class="sig">${c.sig.map(s=>`<span class="pill ${s.c}">${s.t}</span>`).join("")}</div></td></tr>`;}).join("")||`<tr><td colspan="10" class="na">Nessun cliente</td></tr>`;
@@ -2103,7 +2103,7 @@ function parseLead(XLSX,wb,fname,lastMod){
   const yy=m[4]?(m[4].length===4?+m[4]:2000+ +m[4]):es;
   const st=m[5]&&/^def/i.test(m[5])?"def":"provv";
   const d=new Date(lastMod||Date.now());const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  return {sigla:sig,nome,lead:[String(yy),st,iso,(m[2]?String(m[2]).padStart(2,"0"):"")||mm||"12"],y:[KEYS.map(k=>Math.round(cur[k]||0)),KEYS.map(k=>Math.round(prv[k]||0))]};
+  return {sigla:sig,nome,lead:[String(yy),st,iso,m[2]?String(m[1]).padStart(2,"0")+"-"+String(m[2]).padStart(2,"0"):(mm?"31-"+mm:"31-12")],y:[KEYS.map(k=>Math.round(cur[k]||0)),KEYS.map(k=>Math.round(prv[k]||0))]};
 }
 
 
