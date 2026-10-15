@@ -2055,7 +2055,8 @@ $("head").addEventListener("click",e=>{const th=e.target.closest("th[data-k]");i
 $("q").addEventListener("input",e=>{ui.q=e.target.value.trim().toLowerCase();render();});
 // estrazione dati dal file Lead (fogli Riepilogo e Bilancio)
 function parseLead(XLSX,wb,fname,lastMod){
-  const m=/Lead_(\d{2})-(\d{2})_([A-Za-z0-9]+)_(\d{2})_([A-Za-z]+)/.exec(fname)||[];
+  const base=String(fname||"").replace(/\.[^.]+$/,"");
+  const m=/Lead[\s_.-]*(\d{1,2})[-.](\d{1,2})[\s_.-]+([A-Za-z0-9.]+?)[\s_.-]+(\d{2}|\d{4})(?:[\s_.-]+([A-Za-z]+))?\s*$/i.exec(base)||[];
   const ws=wb.Sheets["Riepilogo"];if(!ws)throw new Error("foglio Riepilogo non trovato");
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
   const N=v=>typeof v==="number"?v:(v==null||v===""?0:(+String(v).replace(/\./g,"").replace(",",".")||0));
@@ -2098,10 +2099,11 @@ function parseLead(XLSX,wb,fname,lastMod){
     const cr=br.find(r=>/^i - capitale/.test(norm(r&&r[0])));if(cr){cur.cap=N(cr[1]);prv.cap=N(cr[2]);}}
   const KEYS=["immI","immM","immF","rim","cre","liq","rat","cap","pn","fon","deb","ratp","ric","vp","mat","ser","per","amm","one","fin","imp","ut"];
   const sig=(m[3]||"").toUpperCase();
-  const yy=m[4]?2000+ +m[4]:es;
-  const st=m[5]?(/^def/i.test(m[5])?"def":"provv"):"def";
+  const nome=String((rows[0]||[])[0]||"").trim();
+  const yy=m[4]?(m[4].length===4?+m[4]:2000+ +m[4]):es;
+  const st=m[5]&&/^def/i.test(m[5])?"def":"provv";
   const d=new Date(lastMod||Date.now());const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  return {sigla:sig,lead:[String(yy),st,iso,m[2]||mm||"12"],y:[KEYS.map(k=>Math.round(cur[k]||0)),KEYS.map(k=>Math.round(prv[k]||0))]};
+  return {sigla:sig,nome,lead:[String(yy),st,iso,(m[2]?String(m[2]).padStart(2,"0"):"")||mm||"12"],y:[KEYS.map(k=>Math.round(cur[k]||0)),KEYS.map(k=>Math.round(prv[k]||0))]};
 }
 
 
@@ -2113,7 +2115,8 @@ $("leadIn").addEventListener("change",async e=>{const fs=[...e.target.files];e.t
   try{await loadXLSX();}catch(err){loadMsg=err.message;render();return;}
   let n=0;const bad=[];const now=Date.now();
   for(const f of fs){try{const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true});const r=parseLead(XLSX,wb,f.name,f.lastModified);
-      if(!r.sigla||!A(r.sigla))throw new Error("sigla non trovata in anagrafica");
+      if(!r.sigla||!A(r.sigla)){const nn=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");const a=APP.ana.find(a=>a.sigla&&r.nome&&nn(a.nome)===nn(r.nome));if(a)r.sigla=a.sigla;}
+      if(!r.sigla||!A(r.sigla))throw new Error("cliente non riconosciuto: rinomina il file come Lead_31-12_SIGLA_25_def");
       const old=LEADS[r.sigla],ky=x=>(+x.lead[0])*10+(x.lead[1]==="def"?1:0);
       if(old&&ky(old)>ky(r)){bad.push(f.name+" (più vecchio di quello già caricato)");continue;}
       LEADS[r.sigla]={lead:r.lead,y:r.y,_f:{lead:now,y:now}};n++;}
