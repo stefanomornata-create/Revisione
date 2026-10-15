@@ -1378,6 +1378,9 @@ APP.sec['dichiarativi']={render:()=>render()};
 let SEEDED=0;function SYNC(){clients.forEach(c=>{const a=A(c.sigla);if(!a)return;c.nome=a.nome;const e=AX(a);
   if(!SEEDED){if(c.lead&&e.leadDef===undefined)e.leadDef=true;if(c.rel&&!e.relazione&&new Date(c.rel)<=TODAY)e.relazione=c.rel;}
   c.lead=!!e.leadDef;c.rel=e.relazione||null;
+  const L=((APP.data||{}).lead||{})[c.sigla],p2=n=>String(n).padStart(2,"0"),cd=p2(a.giorno||31)+"-"+p2(a.mese||12);
+  const ld=L&&L.lead?(String(L.lead[3]).length<=2?"31-"+p2(L.lead[3]):String(L.lead[3])):"";
+  c.prov=!!(e.leadProv||e.leadDef||(L&&+L.lead[0]===(TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1)&&ld===cd));
   const ci=(APP.circ||[]).find(x=>x.sigla===c.sigla);
   c.circ={pec1:!!(ci&&ci.p1.pec),pec2:!!(ci&&ci.p2.pec),off:!ci||!ci.attiva};sync(c);if(c.circ.off)c.pre["1.10"]=2;});SEEDED=1;}
 
@@ -1421,11 +1424,12 @@ function info(c){
     if(left<=URGENTE) return {key:"scad",txt:`Completare entro ${left} gg`,cls:"crit",left};
     if(left<=AVVISO) return {key:"vic",txt:`Completare entro ${left} gg`,cls:"warn",left};
     return {key:"",txt:`Da completare entro ${dd(dl)}`,cls:"neu",left};}
+  if(c.prov&&!pc) return {key:"pre",txt:prog(c.pre).done?"Completare preliminary":"Preliminary compilabile",cls:"warn"};
   if(c.lead&&!fc&&prog(c.fin).done===0) return {key:"fin",txt:"Final compilabile",cls:"neu"};
   if(!pc) return {key:"",txt:"Preliminary in corso",cls:"neu"};
   return {key:"",txt:c.lead?"Final in corso":"Attesa bilancio definitivo",cls:"neu"};
 }
-const GROUPS=[["scad","Termine superato o entro 15 giorni","crit"],["vic","Termine entro 30 giorni","warn"],["fin","Final compilabile, non iniziato","neu"]];
+const GROUPS=[["scad","Termine superato o entro 15 giorni","crit"],["pre","Bilancio provvisorio disponibile: compilare preliminary","warn"],["vic","Termine entro 30 giorni","warn"],["fin","Final compilabile, non iniziato","neu"]];
 const ui={q:"",na:false,group:"",coll:""};
 const $=id=>root.querySelector('#'+CSS.escape(id));
 $("fColl").innerHTML=`<option value="">Tutti gli incaricati</option>`+PERSONE.map(p=>`<option>${p}</option>`).join("");
