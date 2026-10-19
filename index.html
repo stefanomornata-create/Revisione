@@ -909,9 +909,9 @@ function catalog(c,r){
   L.push(["f24","F24","CC5",`pagati dal ${dd(R.f24from)} al ${dd(R.f24to)}`],["rimb","Istanze di rimborso","CC6","se presenti"],
     ["sch","Schede contabili tributi e contributi","CC6",`al ${end}`]);
   // esercizio non solare: il trimestre IVA che contiene l'apertura è già stato chiesto l'anno prima,
-  // quindi nella richiesta 1 vanno tutte le liquidazioni dal trimestre successivo fino a quello che contiene la chiusura
+  // richiesta 1: dal trimestre successivo fino a quello prima della chiusura; richiesta 2: il trimestre che contiene la chiusura
   const qEnd=x=>endOfMonth(x.getFullYear(),Math.floor(x.getMonth()/3)*3+2);
-  const lq=c.mese===12?ivaQuarters(R.from,R.to):(r===1?ivaQuarters(new Date(qEnd(P.O).getTime()+DAY),qEnd(P.C)):[]);
+  const lq=c.mese===12?ivaQuarters(R.from,R.to):(r===1?ivaQuarters(new Date(qEnd(P.O).getTime()+DAY),new Date(qEnd(P.C).getTime()-DAY)):ivaQuarters(qEnd(P.C),qEnd(P.C)));
   lq.forEach(([q,y])=>L.push([`lipe${q}_${y}`,`Comunicazione IVA ${QN[q]} trimestre ${y}`,"CC7·CC8","completa di ricevuta di invio"]));
   if(r===1)L.push(["dich",`Dichiarazione IVA ${R.to.getFullYear()-1}`,"CC7·CC8","completa di ricevuta di invio"]);
   L.push(["ric","Riconciliazioni bancarie","CC9",`al ${end}`]);
