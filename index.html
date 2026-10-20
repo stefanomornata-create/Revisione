@@ -143,6 +143,9 @@ legend{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:
 </head>
 <body>
 <script>
+// date digitate a mano: finché l'anno non è completo il browser genera valori come 0002-10-20; li ignoriamo
+["input","change"].forEach(t=>window.addEventListener(t,ev=>{const el=ev.target;
+  if(el&&el.tagName==="INPUT"&&el.type==="date"&&el.value&&+el.value.slice(0,4)<1900)ev.stopImmediatePropagation();},true));
 const _now=new Date();
 let TODAY=new Date(_now.getFullYear(),_now.getMonth(),_now.getDate());
 const APP={sec:{},ana:[],circ:[]};
@@ -345,7 +348,7 @@ function OUTLOOK(t){const L=t.split("\n");const to=(L[0]||"").replace(/^A:\s*/,"
   <div class="tablebox">
     <table>
       <thead><tr>
-        <th>Sigla</th><th>Società</th><th>Incarico</th><th>Orig. / Partner</th>
+        <th id="thSigla" class="sortable" title="Ordina per sigla">Sigla<span id="sortArr"></span></th><th>Società</th><th>Incarico</th><th>Orig. / Partner</th>
         <th>Chiusura</th><th>Mandato</th><th>Coll.</th><th>Bilancio e relazione</th><th>CQ</th>
       </tr></thead>
       <tbody id="rows"></tbody>
@@ -406,7 +409,8 @@ function mandato(c){
 function progress(c){const e=c.esercizi[esYear(c)]||{};return STEPS.filter(([k])=>e[k]).length;}
 
 // ---- filtri ----
-const st={q:"",tipo:"Tutti",partner:"",mand:false,cessati:false};
+const st={q:"",tipo:"Tutti",partner:"",mand:false,cessati:false,sort:0};
+try{st.sort=+localStorage.getItem("revisione_ana_sort")||0;}catch(e){}
 const $=id=>root.querySelector('#'+CSS.escape(id));
 $("segTipo").innerHTML=["Tutti",...TIPI].map(t=>`<button type="button" data-t="${t}" aria-pressed="${t==="Tutti"}">${t}</button>`).join("");
 $("segTipo").onclick=e=>{const b=e.target.closest("button");if(!b)return;st.tipo=b.dataset.t;[...$("segTipo").children].forEach(x=>x.setAttribute("aria-pressed",x===b));render();};
@@ -415,6 +419,7 @@ $("fPartner").onchange=e=>{st.partner=e.target.value;render();};
 $("q").oninput=e=>{st.q=e.target.value.toLowerCase();render();};
 $("fMandato").onchange=e=>{st.mand=e.target.checked;render();};
 $("fCessati").onchange=e=>{st.cessati=e.target.checked;render();};
+$("thSigla").onclick=()=>{st.sort=st.sort===0?1:st.sort===1?-1:0;try{localStorage.setItem("revisione_ana_sort",st.sort);}catch(e){}_render();};
 
 const esc=s=>String(s??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
 
@@ -436,6 +441,8 @@ function _render(){
     if(st.mand&&mandato(c).rem>0)return false;
     if(st.q&&!(`${c.nome} ${c.sigla} ${c.viaPartner?"partner":c.contatto}`.toLowerCase().includes(st.q)))return false;
     return true;});
+  if(st.sort)list.sort((a,b)=>String(a.sigla||"").localeCompare(String(b.sigla||""),"it")*st.sort);
+  $("sortArr").textContent=st.sort>0?" ▲":st.sort<0?" ▼":"";
   $("rows").innerHTML=list.map(c=>{
     const y=esYear(c), md=mandato(c), p=progress(c), e=c.esercizi[y]||{};
     const op=c.origine||c.partner?`${esc(c.origine||"–")} / ${esc(c.partner||"–")}`:`<span class="muted">Esterno${c.esterno?" · "+esc(c.esterno):""}</span>`;
@@ -489,8 +496,7 @@ function openDrawer(id){
 
   <fieldset><legend>Esercizio ${y}</legend>
     <div class="ro"><span>Chiusura</span><b>${chiusura(c,y)}</b></div>
-    <div class="ro"><span>Relazione ${y-1}</span><b>${prev?fmt(prev):"—"}</b></div>
-    ${STEPS.map(([k,l,t])=>`<div class="step ${e[k]?"on":""}"><span class="dot"></span><label for="e_${k}">${l}</label>${t==="data"
+    ${STEPS.map(([k,l,t])=>`<div class="step ${e[k]?"on":""}"><span class="dot"></span><label for="e_${k}">${k==="relazione"?l+" "+y:l}</label>${t==="data"
       ?`<input type="date" id="e_${k}" data-e="${k}" value="${e[k]||""}">`
       :`<label class="chk"><input type="checkbox" id="e_${k}" data-e="${k}" ${e[k]?"checked":""}> Fatto</label>`}</div>`).join("")}
     <label class="f"><span>Previsione chiusura</span><input type="date" id="e_previsione" data-e="previsione" value="${e.previsione||""}"></label>
@@ -521,7 +527,8 @@ APP.ana=clients;APP.sec['anagrafica']={render:()=>render()};
 
 })(document.getElementById('sec-anagrafica'));</script>
 
-<style>#sec-circolarizzazioni .todo{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+<style>#sec-anagrafica th.sortable{cursor:pointer;user-select:none}#sec-anagrafica th.sortable:hover{color:var(--accent)}
+#sec-circolarizzazioni .todo{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
 #sec-circolarizzazioni .todo .tcard{flex:1 1 0;min-width:118px;padding:9px 10px;gap:6px}
 #sec-circolarizzazioni .todo .tcard .h{flex-direction:column;align-items:flex-start;gap:2px;font-size:12.5px;line-height:1.3}
 #sec-circolarizzazioni .todo .tcard .h .n{order:-1;font-size:20px;line-height:1.1}
