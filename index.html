@@ -2035,9 +2035,10 @@ const SRC_CL=()=>APP.ana.filter(a=>a.sigla&&a.attivo!==false).map(a=>[a.sigla,a.
 const MKB=(([sigla,nome,tipo])=>{const L=LEADS[sigla];
   if(!L)return {id:sigla,sigla,nome,tipo,miss:true,sig:[{t:"Lead mancante",c:"neu"}]};
   const [es,st,data,mm0]=L.lead,mm=String(mm0||"12").length<=2?(String(mm0)==="08"?"31-08":"31-12"):String(mm0),cur=calc(L.y[0]),prv=calc(L.y[1]);
-  return {id:sigla,sigla,nome,tipo,es:+es,st,data,mm,cur,prv};});
+  return {id:sigla,sigla,nome,tipo,es:+es,st,data,mm,cur,prv,q:L.q||[0,0]};});
 let clients=[];
 function signals(c){if(c.miss)return c.sig;const a=c.cur,p=c.prv,s=[];
+  if(Math.abs(c.q[0])>1)s.push({t:"BdV non quadra ("+fmtE(c.q[0])+")",c:"crit"});
   if(a.pn<0)s.push({t:"PN negativo",c:"crit"});
   else if(a.pn<a.cap*2/3)s.push({t:"Perdite oltre 1/3 del capitale",c:"crit"});
   if(a.ut<0)s.push({t:"In perdita",c:"warn"});
@@ -2088,7 +2089,7 @@ function openDrawer(id){openId=id;const c=clients.find(x=>x.id===id);
   $("dBody").innerHTML=`<div class="ro"><span class="mono">${fileName(c)}</span><span>${dd(c.data)} <span class="pill ${c.st==="def"?"ok":"warn"}">${c.st==="def"?"definitivo":"provvisorio"}</span></span></div>
   ${c.sig.length?`<div class="sigs">${c.sig.map(s=>`<span class="pill ${s.c}">${s.t}</span>`).join("")}</div>`:""}
   <fieldset><legend>Conto economico · €</legend><table class="mt">${hd}
-    ${row("Ricavi",a.ric,p.ric,fmtE,"",1)}${row("Valore della produzione",a.vp,p.vp,fmtE,"",1)}${row("EBITDA",a.ebitda,p.ebitda,fmtE,"tot",1)}
+    ${a.ric!==a.vp||p.ric!==p.vp?row("Ricavi",a.ric,p.ric,fmtE,"",1):""}${row("Valore della produzione",a.vp,p.vp,fmtE,"",1)}${row("EBITDA",a.ebitda,p.ebitda,fmtE,"tot",1)}
     ${row("Ammortamenti e svalutazioni",a.amm,p.amm,fmtE)}${row("EBIT",a.ebit,p.ebit,fmtE,"tot",1)}${row("Gestione finanziaria",a.fin,p.fin,fmtE)}
     ${row("Imposte",a.imp,p.imp,fmtE)}${row("Risultato",a.ut,p.ut,fmtE,"tot",1)}</table></fieldset>
   <fieldset><legend>Stato patrimoniale · €</legend><table class="mt">${hd}
@@ -2098,7 +2099,7 @@ function openDrawer(id){openId=id;const c=clients.find(x=>x.id===id);
   <fieldset><legend>Indici</legend><table class="mt"><tr><th></th><th>${Y}</th><th>${Y-1}</th><th></th></tr>
     ${irow("ROE",a.roe,p.roe,pct,1)}${irow("ROI",a.roi,p.roi,pct,1)}${irow("ROS",a.ros,p.ros,pct,1)}${irow("EBITDA margin",a.em,p.em,pct,1)}
     ${irow("PN / totale attivo",a.sol,p.sol,pct,1)}${irow("Debiti / PN",a.lev,p.lev,v=>num(v),-1)}${irow("Copertura immobilizzazioni",a.cop,p.cop,v=>num(v),1)}
-    ${irow("Attivo circolante / debiti",a.liqr,p.liqr,v=>num(v),1)}${irow("Giorni crediti",a.dso,p.dso,gg,-1)}${irow("Giorni magazzino",a.dio,p.dio,gg,-1)}${irow("Giorni debiti ≈",a.dpo,p.dpo,gg,0)}
+    ${irow("Attivo circolante / debiti",a.liqr,p.liqr,v=>num(v),1)}${irow("Giorni crediti",a.dso,p.dso,gg,-1)}${irow("Giorni magazzino ≈",a.dio,p.dio,gg,-1)}${irow("Giorni debiti ≈",a.dpo,p.dpo,gg,0)}
   </table></fieldset>`;
   $("drawerBox").hidden=false;}
 function closeDrawer(){openId=null;$("drawerBox").hidden=true;}
@@ -2106,57 +2107,42 @@ $("rows").addEventListener("click",e=>{const tr=e.target.closest("tr[data-id]");
 $("todo").addEventListener("click",e=>{const b=e.target.closest("[data-f]");if(!b)return;ui.f=ui.f===b.dataset.f?"":b.dataset.f;render();});
 $("head").addEventListener("click",e=>{const th=e.target.closest("th[data-k]");if(!th)return;const k=th.dataset.k;ui.dir=ui.sort===k?-ui.dir:1;ui.sort=k;render();});
 $("q").addEventListener("input",e=>{ui.q=e.target.value.trim().toLowerCase();render();});
-// estrazione dati dal file Lead (fogli Riepilogo e Bilancio)
+// estrazione dati dal file Lead: foglio del bilancio di verifica ("Interim" = provvisorio, "Final" = definitivo),
+// sottoconti sommati per area (colonna WP's ref)
 function parseLead(XLSX,wb,fname,lastMod){
   const base=String(fname||"").replace(/\.[^.]+$/,"");
   const m=/Lead[\s_.-]*(\d{1,2})[-.](\d{1,2})[\s_.-]+([A-Za-z0-9.]+?)[\s_.-]+(\d{2}|\d{4})(?:[\s_.-]+([A-Za-z]+))?\s*$/i.exec(base)||[];
-  const ws=wb.Sheets["Riepilogo"];if(!ws)throw new Error("foglio Riepilogo non trovato");
-  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
   const N=v=>typeof v==="number"?v:(v==null||v===""?0:(+String(v).replace(/\./g,"").replace(",",".")||0));
   const norm=s=>String(s||"").toLowerCase().replace(/[’'`]/g,"").replace(/\s+/g," ").trim();
-  let cur={},prv={},inCE=false,ratei=0;
-  const put=(k,r)=>{cur[k]=(cur[k]||0)+N(r[3]);prv[k]=(prv[k]||0)+N(r[4]);};
-  let es=null,mm=null;
-  for(const r of rows){
-    if(!es&&r&&r[3] instanceof Date){es=r[3].getFullYear();mm=String(r[3].getMonth()+1).padStart(2,"0");}
-    const l=norm(r&&r[1]);if(!l)continue;
-    if(!inCE){
-      if(l.startsWith("i - immobilizzazioni immateriali"))put("immI",r);
-      else if(l.startsWith("ii - immobilizzazioni materiali"))put("immM",r);
-      else if(l.startsWith("iii - immobilizzazioni finanziarie"))put("immF",r);
-      else if(l.startsWith("i - rimanenze"))put("rim",r);
-      else if(l.startsWith("ii - crediti"))put("cre",r);
-      else if(l.startsWith("iii - attivita"))put("liq",r);
-      else if(l.startsWith("iv - disponibilita"))put("liq",r);
-      else if(/^[de]\) ratei e risconti/.test(l)){put(ratei++?"ratp":"rat",r);}
-      else if(l.startsWith("a) patrimonio netto"))put("pn",r);
-      else if(l.startsWith("b) fondi per rischi")||l.startsWith("c) trattamento di fine rapporto"))put("fon",r);
-      else if(l.startsWith("d) debiti"))put("deb",r);
-      else if(l.startsWith("1) ricavi")){inCE=true;put("ric",r);}
-    } else {
-      const n=(/^(\d+(?:-bis)?)\)/.exec(l)||[])[1];
-      if(l.startsWith("totale valore della produzione"))put("vp",r);
-      else if(l.startsWith("risultato netto")||l.startsWith("utile (perdita)"))put("ut",r);
-      else if(n==="6"||n==="11")put("mat",r);
-      else if(n==="7"||n==="8")put("ser",r);
-      else if(n==="9")put("per",r);
-      else if(n==="10")put("amm",r);
-      else if(n==="12"||n==="13"||n==="14")put("one",r);
-      else if(["15","16","17","17-bis","18","19"].includes(n))put("fin",r);
-      else if(n==="20"){cur.imp=(cur.imp||0)-N(r[3]);prv.imp=(prv.imp||0)-N(r[4]);}
-    }
+  const rowsOf=n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null});
+  const hdrAt=rows=>rows.findIndex(r=>r&&norm(r[0])==="conto"&&/^wp/.test(norm(r[2])));
+  let sh=wb.SheetNames.find(n=>/^\s*(interim|final)\s*$/i.test(n));
+  if(!sh)sh=wb.SheetNames.find(n=>hdrAt(rowsOf(n))>=0);
+  if(!sh)throw new Error("foglio Interim/Final non trovato");
+  const rows=rowsOf(sh),h=hdrAt(rows);
+  if(h<0)throw new Error(`intestazione Conto / WP's ref non trovata nel foglio ${sh}`);
+  let es=null,mm=null;const dh=rows[h][3];
+  if(dh instanceof Date){es=dh.getFullYear();mm=String(dh.getMonth()+1).padStart(2,"0");}
+  const S=[{},{}],cap=[0,0],tot=[0,0];
+  for(const r of rows.slice(h+1)){
+    const a=String((r&&r[2])||"").trim().toUpperCase().charAt(0);if(!/[A-Z]/.test(a))continue;
+    [0,1].forEach(i=>{const v=N(r[3+i]);S[i][a]=(S[i][a]||0)+v;tot[i]+=v;
+      if(a==="L"&&/capitale sociale|^capitale$/.test(norm(r[1])))cap[i]-=v;});
   }
-  if(!inCE)throw new Error("conto economico non trovato nel Riepilogo");
-  const wb2=wb.Sheets["Bilancio"];
-  if(wb2){const br=XLSX.utils.sheet_to_json(wb2,{header:1,raw:true,defval:null});
-    const cr=br.find(r=>/^i - capitale/.test(norm(r&&r[0])));if(cr){cur.cap=N(cr[1]);prv.cap=N(cr[2]);}}
-  const KEYS=["immI","immM","immF","rim","cre","liq","rat","cap","pn","fon","deb","ratp","ric","vp","mat","ser","per","amm","one","fin","imp","ut"];
+  if(!Object.keys(S[0]).length)throw new Error(`nessun conto con WP's ref nel foglio ${sh}`);
+  const y=S.map((s,i)=>{const g=k=>[...k].reduce((t,c)=>t+(s[c]||0),0);
+    const ut=-g("RSTUVZ");
+    const o={immI:g("B"),immM:g("C"),immF:g("D"),rim:g("E"),cre:g("AF"),liq:g("GH"),rat:g("I"),cap:cap[i],
+      pn:-g("L")+ut,fon:-g("MN"),deb:-g("P"),ratp:-g("Q"),ric:-g("R"),vp:-g("R"),
+      mat:g("U"),ser:0,per:g("S"),amm:g("T"),one:0,fin:-g("V"),imp:g("Z"),ut};
+    return KEYS.map(k=>Math.round(o[k]||0));});
+  if(!y[0][KEYS.indexOf("cap")]&&y[1][KEYS.indexOf("cap")])y[0][KEYS.indexOf("cap")]=y[1][KEYS.indexOf("cap")];
   const sig=(m[3]||"").toUpperCase();
-  const nome=String((rows[0]||[])[0]||"").trim();
+  const nome=String((rows[0]||[])[0]||((wb.Sheets["Riepilogo"]&&rowsOf("Riepilogo")[0])||[])[0]||"").trim();
   const yy=m[4]?(m[4].length===4?+m[4]:2000+ +m[4]):es;
-  const st=m[5]&&/^def/i.test(m[5])?"def":"provv";
+  const st=/^\s*final\s*$/i.test(sh)?"def":/^\s*interim\s*$/i.test(sh)?"provv":(m[5]&&/^def/i.test(m[5])?"def":"provv");
   const d=new Date(lastMod||Date.now());const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  return {sigla:sig,nome,lead:[String(yy),st,iso,m[2]?String(m[1]).padStart(2,"0")+"-"+String(m[2]).padStart(2,"0"):(mm?"31-"+mm:"31-12")],y:[KEYS.map(k=>Math.round(cur[k]||0)),KEYS.map(k=>Math.round(prv[k]||0))]};
+  return {sigla:sig,nome,lead:[String(yy),st,iso,m[2]?String(m[1]).padStart(2,"0")+"-"+String(m[2]).padStart(2,"0"):(mm?"31-"+mm:"31-12")],y,q:tot.map(v=>Math.round(v))};
 }
 
 
@@ -2172,7 +2158,7 @@ $("leadIn").addEventListener("change",async e=>{const fs=[...e.target.files];e.t
       if(!r.sigla||!A(r.sigla))throw new Error("cliente non riconosciuto: rinomina il file come Lead_31-12_SIGLA_25_def");
       const old=LEADS[r.sigla],ky=x=>(+x.lead[0])*10+(x.lead[1]==="def"?1:0);
       if(old&&ky(old)>ky(r)){bad.push(f.name+" (più vecchio di quello già caricato)");continue;}
-      LEADS[r.sigla]={lead:r.lead,y:r.y,_f:{lead:now,y:now}};n++;}
+      LEADS[r.sigla]={lead:r.lead,y:r.y,q:r.q,_f:{lead:now,y:now,q:now}};n++;if(r.q.some(v=>Math.abs(v)>1))bad.push(f.name+" (bilancio di verifica non quadra)");}
     catch(err){bad.push(f.name+(err.message?" ("+err.message+")":""));}}
   if(n)APP.changed();
   loadMsg=(n?`${n} Lead aggiornati`:"Nessun Lead aggiornato")+(bad.length?` · non letti: ${bad.join(", ")}`:"");render();
