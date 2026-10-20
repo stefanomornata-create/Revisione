@@ -348,7 +348,7 @@ function OUTLOOK(t){const L=t.split("\n");const to=(L[0]||"").replace(/^A:\s*/,"
   <div class="tablebox">
     <table>
       <thead><tr>
-        <th id="thSigla" class="sortable" title="Ordina per sigla">Sigla<span id="sortArr"></span></th><th>Società</th><th>Incarico</th><th>Orig. / Partner</th>
+        <th>Sigla</th><th>Società</th><th>Incarico</th><th>Orig. / Partner</th>
         <th>Chiusura</th><th>Mandato</th><th>Coll.</th><th>Bilancio e relazione</th><th>CQ</th>
       </tr></thead>
       <tbody id="rows"></tbody>
@@ -409,8 +409,7 @@ function mandato(c){
 function progress(c){const e=c.esercizi[esYear(c)]||{};return STEPS.filter(([k])=>e[k]).length;}
 
 // ---- filtri ----
-const st={q:"",tipo:"Tutti",partner:"",mand:false,cessati:false,sort:0};
-try{st.sort=+localStorage.getItem("revisione_ana_sort")||0;}catch(e){}
+const st={q:"",tipo:"Tutti",partner:"",mand:false,cessati:false};
 const $=id=>root.querySelector('#'+CSS.escape(id));
 $("segTipo").innerHTML=["Tutti",...TIPI].map(t=>`<button type="button" data-t="${t}" aria-pressed="${t==="Tutti"}">${t}</button>`).join("");
 $("segTipo").onclick=e=>{const b=e.target.closest("button");if(!b)return;st.tipo=b.dataset.t;[...$("segTipo").children].forEach(x=>x.setAttribute("aria-pressed",x===b));render();};
@@ -419,7 +418,6 @@ $("fPartner").onchange=e=>{st.partner=e.target.value;render();};
 $("q").oninput=e=>{st.q=e.target.value.toLowerCase();render();};
 $("fMandato").onchange=e=>{st.mand=e.target.checked;render();};
 $("fCessati").onchange=e=>{st.cessati=e.target.checked;render();};
-$("thSigla").onclick=()=>{st.sort=st.sort===0?1:st.sort===1?-1:0;try{localStorage.setItem("revisione_ana_sort",st.sort);}catch(e){}_render();};
 
 const esc=s=>String(s??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
 
@@ -441,8 +439,6 @@ function _render(){
     if(st.mand&&mandato(c).rem>0)return false;
     if(st.q&&!(`${c.nome} ${c.sigla} ${c.viaPartner?"partner":c.contatto}`.toLowerCase().includes(st.q)))return false;
     return true;});
-  if(st.sort)list.sort((a,b)=>String(a.sigla||"").localeCompare(String(b.sigla||""),"it")*st.sort);
-  $("sortArr").textContent=st.sort>0?" ▲":st.sort<0?" ▼":"";
   $("rows").innerHTML=list.map(c=>{
     const y=esYear(c), md=mandato(c), p=progress(c), e=c.esercizi[y]||{};
     const op=c.origine||c.partner?`${esc(c.origine||"–")} / ${esc(c.partner||"–")}`:`<span class="muted">Esterno${c.esterno?" · "+esc(c.esterno):""}</span>`;
@@ -527,8 +523,7 @@ APP.ana=clients;APP.sec['anagrafica']={render:()=>render()};
 
 })(document.getElementById('sec-anagrafica'));</script>
 
-<style>#sec-anagrafica th.sortable{cursor:pointer;user-select:none}#sec-anagrafica th.sortable:hover{color:var(--accent)}
-#sec-circolarizzazioni .todo{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+<style>#sec-circolarizzazioni .todo{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
 #sec-circolarizzazioni .todo .tcard{flex:1 1 0;min-width:118px;padding:9px 10px;gap:6px}
 #sec-circolarizzazioni .todo .tcard .h{flex-direction:column;align-items:flex-start;gap:2px;font-size:12.5px;line-height:1.3}
 #sec-circolarizzazioni .todo .tcard .h .n{order:-1;font-size:20px;line-height:1.1}
@@ -2448,5 +2443,32 @@ APP.persist();APP.ready=true;
 if(APP.hasToken())APP.sync(true);
 })();
 </script>
+<style>th.sortsoc{cursor:pointer;user-select:none}th.sortsoc:hover{color:var(--accent)}</style>
+<script>(function(){
+// clic su "Società": A→Z, Z→A, ordine normale; la scelta resta nel browser per ogni sezione
+["anagrafica","circolarizzazioni","controlli","dichiarativi","general","audit","inventari"].forEach(name=>{
+  const sec=document.getElementById("sec-"+name); if(!sec)return;
+  const tb=sec.querySelector(".tablebox tbody#rows"), ths=[...sec.querySelectorAll(".tablebox thead th")];
+  const th=ths.find(x=>x.textContent.trim()==="Società"); if(!tb||!th)return;
+  const idx=ths.indexOf(th), key="revisione_sort_"+name, arr=document.createElement("span");
+  th.classList.add("sortsoc"); th.title="Ordina per società"; th.appendChild(arr);
+  let dir=0, orig=[], busy=false;
+  try{dir=+localStorage.getItem(key)||0;}catch(e){}
+  const rows=()=>[...tb.children].filter(r=>r.dataset.id!=null);
+  const apply=()=>{busy=true;
+    arr.textContent=dir>0?" ▲":dir<0?" ▼":"";
+    const rs=rows();
+    const ord=dir?rs.slice().sort((a,b)=>((a.cells[idx]||{}).textContent||"").trim().localeCompare(((b.cells[idx]||{}).textContent||"").trim(),"it",{sensitivity:"base"})*dir)
+                 :orig.map(id=>rs.find(r=>r.dataset.id===id)).filter(Boolean);
+    const rest=[...tb.children].filter(r=>!ord.includes(r));
+    [...ord,...rest].forEach(r=>tb.appendChild(r));
+    mo.takeRecords(); busy=false;};
+  const mo=new MutationObserver(()=>{if(busy)return;orig=rows().map(r=>r.dataset.id);if(dir)apply();});
+  mo.observe(tb,{childList:true});
+  orig=rows().map(r=>r.dataset.id);
+  th.addEventListener("click",()=>{dir=dir===0?1:dir===1?-1:0;try{localStorage.setItem(key,dir);}catch(e){}apply();});
+  apply();
+});
+})();</script>
 </body>
 </html>
