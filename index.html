@@ -1961,9 +1961,10 @@ APP.sec['inventari']={render:()=>render()};
 #sec-bilanci td.neg,#sec-bilanci .neg{color:var(--crit)}
 #sec-bilanci td.up{color:var(--ok)}
 #sec-bilanci td.dn{color:var(--crit)}
-#sec-bilanci #rows td:nth-child(2){white-space:nowrap}
+#sec-bilanci #rows td:nth-child(2){min-width:140px;max-width:220px}
 #sec-bilanci .lead{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-family:var(--f-mono);font-size:12.5px}
-#sec-bilanci .sig{display:flex;flex-wrap:wrap;gap:4px;max-width:300px}
+#sec-bilanci .sig{display:flex;flex-wrap:wrap;gap:4px;min-width:150px}
+#sec-bilanci .sig .pill{white-space:nowrap}
 #sec-bilanci .miss td{color:var(--muted)}
 #sec-bilanci .mt{grid-column:1/-1;width:100%;border-collapse:collapse;min-width:0!important;font-size:13.5px}
 #sec-bilanci .mt th{background:none;padding:4px 6px 6px;border-bottom:1px solid var(--line)}
@@ -1978,7 +1979,11 @@ APP.sec['inventari']={render:()=>render()};
 #sec-bilanci .mt tr.sub td{padding:12px 6px 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;font-family:inherit}
 #sec-bilanci .ro{flex-wrap:wrap}
 #sec-bilanci .sigs{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
-#sec-bilanci table{min-width:1160px}</style>
+#sec-bilanci table{min-width:0}
+#sec-bilanci #head th{white-space:normal;vertical-align:bottom;padding:10px 8px;line-height:1.25}
+#sec-bilanci #rows td{padding-left:8px;padding-right:8px}
+#sec-bilanci .lead{flex-wrap:wrap;row-gap:3px}
+@media (max-width:900px){#sec-bilanci table{min-width:900px}}</style>
 <section id="sec-bilanci" class="sec" hidden><span id="seasonLbl" hidden></span>
 <div class="wrap">
   <div class="top"><h1>Bilanci</h1></div>
