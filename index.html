@@ -1243,7 +1243,7 @@ APP.sec.controlli.parts=()=>{const a=clients.filter(c=>c.attiva);
 function SYNC(){clients.forEach(c=>{const a=A(c.sigla);if(!a)return;c.nome=a.nome;c.contatto=a.viaPartner?"":a.contatto;});}
 
 const PERSONE=["Nicolò","Giada","Andrea"];
-const REG={preavviso:30,richiestaTardi:20,sollecito:10,letteraGG:7,vicina:7};
+const REG={preavviso:30,richiestaTardi:20,sollecito:7,letteraGG:7,vicina:7}; // sollecito: giorni prima della scadenza di invio
 const DAY=864e5;
 const pad=n=>String(n).padStart(2,"0");
 const iso=x=>`${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`;
@@ -1277,15 +1277,20 @@ let clients=CL.map(MK);APP.track('dichiarativi',clients);
 
 const need=(c,k)=>MOD[k].filter(([m])=>!c.nd.includes(m));
 const missing=(c,k)=>need(c,k).filter(([m])=>!c[k].got.includes(m));
+// modelli arrivati dopo l'ultima verifica (vok = modelli visti; dati vecchi senza vok: tutti visti)
+const unver=(c,k)=>{const b=c[k];if(!b.ver)return [];const v=b.vok||b.got;return need(c,k).filter(([m])=>b.got.includes(m)&&!v.includes(m));};
+const verOk=(c,k)=>!!c[k].ver&&!unver(c,k).length;
 function bAct(c,k){
   const b=c[k],bl=blocchi(c)[k],toDue=Math.round((bl.scad-TODAY)/DAY),lbl=k==="770"?"770":"Redditi/IRAP";
   if(!need(c,k).length) return null;
   if(!b.ric){ if(c.tipo!=="Diretto") return {key:"",txt:"Richiesta del partner",cls:"neu",idle:1}; if(toDue<=REG.preavviso) return {key:"ric",txt:`Inviare richiesta ${lbl}`,cls:toDue<=REG.richiestaTardi?"crit":"warn"}; return {key:"",txt:"In attesa",cls:"neu",idle:1};}
-  if(missing(c,k).length){ if(c.tipo==="Diretto"&&!b.sol&&days(b.ric)>=REG.sollecito) return {key:"sol",txt:`Sollecitare ${lbl}`,cls:"crit"};
-    return {key:"",txt:`Attesa modelli ${lbl}`,cls:toDue<=REG.vicina?"warn":"neu"};}
-  if(!b.ver) return {key:"ver",txt:`Verifica ${lbl} da fare`,cls:toDue<=REG.vicina?"crit":"warn"};
+  const ms=missing(c,k).length,arr=need(c,k).length-ms;
+  if(ms&&c.tipo==="Diretto"&&!b.sol&&toDue<=REG.sollecito) return {key:"sol",txt:`Sollecitare ${lbl}`,cls:"crit"};
+  if(!b.ver) return arr?{key:"ver",txt:`Verifica ${lbl} da fare`,cls:toDue<=REG.vicina?"crit":"warn"}:{key:"",txt:`Attesa modelli ${lbl}`,cls:toDue<=REG.vicina?"warn":"neu"};
+  if(unver(c,k).length) return {key:"ver",txt:`Verificare nuovi modelli ${lbl}`,cls:toDue<=REG.vicina?"crit":"warn"};
   if(!b.esito) return {key:"esito",txt:`Comunicare esito ${lbl}`,cls:toDue<=REG.vicina?"crit":"warn"};
   if(!b.firm) return days(b.esito)>=REG.letteraGG||toDue<=REG.vicina?{key:"lett",txt:`Sollecitare lettera ${lbl}`,cls:"crit"}:{key:"",txt:`Attesa lettera ${lbl}`,cls:"neu"};
+  if(ms) return {key:"",txt:`Attesa modelli ${lbl}`,cls:toDue<=REG.vicina?"warn":"neu"};
   return {key:"",txt:"Completato",cls:"ok",done:1};
 }
 const rank={crit:0,warn:1,neu:2,ok:3};
@@ -1311,7 +1316,7 @@ function track(c,k){
     <span class="mk sq ${b.ric?"on":""}"></span>
     <span class="mk ci ${b.ric?(ms?"miss":"on"):""}"></span>${b.ric&&ms?`<span class="miss-n">${ms}</span>`:""}
     <span class="mk di ${b.sol?"on":""}"></span>
-    <span class="mk ci ${b.ver?"on":""}"></span>
+    <span class="mk ci ${verOk(c,k)?"on":""}"></span>
     <span class="mk sq ${b.esito?"on":""}"></span>
     <span class="mk ci ${b.firm?"on":""}"></span>
     <span class="due ${!done&&toDue<=REG.vicina?"near":""}">${dd(bl.scad).slice(0,5)}</span></span>`;
@@ -1363,7 +1368,7 @@ function mailText(c,ks,soll){
 // ---- scheda ----
 let openId=null,mailOpen=null,toast=null,toastMsg="";
 function blockUI(c,k){
-  const b=c[k],bl=blocchi(c)[k],ms=missing(c,k),nd=need(c,k);
+  const b=c[k],bl=blocchi(c)[k],ms=missing(c,k),nd=need(c,k),nv=unver(c,k).length;
   if(!nd.length) return `<fieldset><legend>${k==="770"?"770":"Redditi e IRAP"}</legend><div class="row2 na">Non dovuto per questo cliente</div></fieldset>`;
   const row=(key,label,shape,type,dis)=>`<div class="srow ${b[key]?"on":""}"><span class="dot ${shape}"></span><span class="l">${label}</span>${type==="d"
     ?`<input type="date" id="${k}_${key}" data-b="${k}" data-k="${key}" data-t="d" value="${b[key]||""}" ${dis?"disabled":""}>`
@@ -1371,10 +1376,10 @@ function blockUI(c,k){
   return `<fieldset><legend>${bl.label}</legend>
     <div class="ro"><span>Scadenza invio</span><b>${dd(bl.scad)}</b></div>
     ${c.tipo!=="Diretto"?row("ric",`Richiesta fatta${c.richDa?" da "+esc(c.richDa):" dal partner"}`,"ci","c"):row("ric","Richiesta inviata","sq","d")}
+    ${c.tipo==="Diretto"?row("sol","Sollecito inviato","di","c",!b.ric||!ms.length&&!b.sol):""}
     <div class="srow ${b.ric&&!ms.length?"on":""}"><span class="dot"></span><span class="l">Modelli ricevuti</span><span class="na">${b.ric?(ms.length?ms.length+" mancanti":"tutti"):""}</span></div>
     <div class="mods">${MOD[k].map(([m,l])=>c.nd.includes(m)?`<span class="mod nd">${l}</span>`:`<button type="button" class="mod" data-got="${k}:${m}" aria-pressed="${b.got.includes(m)}" ${b.ric?"":"disabled"}>${l}</button>`).join("")}</div>
-    ${c.tipo==="Diretto"?row("sol","Sollecito inviato","di","c",!b.ric||!ms.length&&!b.sol):""}
-    ${row("ver","Verifica svolta","ci","c",ms.length>0||!b.ric)}
+    <div class="srow ${verOk(c,k)?"on":""}"><span class="dot ci"></span><span class="l">Verifica svolta${nv?` <span class="na">· ${nv===1?"1 modello nuovo":nv+" modelli nuovi"} da vedere</span>`:""}</span><input type="checkbox" id="${k}_ver" data-b="${k}" data-k="ver" data-t="c" ${verOk(c,k)?"checked":""} ${!b.ric||ms.length===nd.length?"disabled":""} aria-label="Verifica svolta"></div>
     ${row("esito","Esito comunicato e bozza lettera inviata","sq","d",!b.ver)}
     <div class="row2" style="padding-left:30px"><button type="button" class="btn ghost" data-lett="${k}" ${b.ver?"":"disabled"}>Genera lettera di attestazione</button>${toast===k?`<span class="toast">${esc(toastMsg)}</span>`:""}</div>
     ${row("firm","Lettera firmata ricevuta","ci","c",!b.esito)}
@@ -1407,6 +1412,7 @@ $("dBody").addEventListener("change",ev=>{const t=ev.target,c=cur();if(!c)return
   else if(t.dataset.note)c.note=t.value;
   else if(t.dataset.c)c[t.dataset.c]=t.value;
   else if(t.dataset.nd){const m=t.dataset.nd;t.checked?c.nd.push(m):c.nd=c.nd.filter(x=>x!==m);}
+  else if(t.dataset.b&&t.dataset.k==="ver"){const b=c[t.dataset.b];if(t.checked){b.ver=b.ver||iso(TODAY);b.vok=[...b.got];}else{b.ver=null;b.vok=[];}}
   else if(t.dataset.b){const b=c[t.dataset.b];b[t.dataset.k]=t.dataset.t==="d"?(t.value||null):(t.checked?iso(TODAY):null);}
   refresh(t);});
 $("dBody").addEventListener("click",ev=>{const c=cur();if(!c)return;const b=ev.target.closest("button");if(!b||b.disabled)return;
@@ -1430,10 +1436,10 @@ APP.sec.dichiarativi.agenda=()=>{const T=[],plus=(s,n)=>new Date(pd(s).getTime()
     const add=o=>T.push(Object.assign({id:c.id,sigla:c.sigla,nome:c.nome,who:""},o));
     ["770","ri"].forEach(k=>{const a=bAct(c,k);if(!a||a.done)return;const b=c[k],bl=blocchi(c)[k],lbl=k==="770"?"770":"Redditi/IRAP";
       if(a.key){add({txt:a.txt,cls:a.cls,sym:{ric:"d",sol:"r",ver:"s",esito:"d",lett:"r"}[a.key],who:a.key==="ver"?c.coll:"",
-        d:{ric:less(bl.scad,REG.preavviso),sol:b.ric&&plus(b.ric,REG.sollecito),ver:bl.scad,esito:bl.scad,lett:b.esito&&plus(b.esito,REG.letteraGG)}[a.key]||null});return;}
+        d:{ric:less(bl.scad,REG.preavviso),sol:less(bl.scad,REG.sollecito),ver:bl.scad,esito:bl.scad,lett:b.esito&&plus(b.esito,REG.letteraGG)}[a.key]||null});return;}
       if(c.tipo!=="Diretto")return;
       if(!b.ric)add({txt:`Inviare richiesta ${lbl}`,d:less(bl.scad,REG.preavviso),sym:"d",fut:1});
-      else if(missing(c,k).length&&!b.sol)add({txt:`Sollecitare ${lbl}`,d:plus(b.ric,REG.sollecito),sym:"r",fut:1});
+      else if(missing(c,k).length&&!b.sol)add({txt:`Sollecitare ${lbl}`,d:less(bl.scad,REG.sollecito),sym:"r",fut:1});
       else if(b.esito&&!b.firm)add({txt:`Sollecitare lettera ${lbl}`,d:plus(b.esito,REG.letteraGG),sym:"r",fut:1});});});
   return {T,prog:[done,act.length]};};
 
