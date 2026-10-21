@@ -167,7 +167,7 @@ const bucket=name=>{if(name==="anagrafica")return D.ana;const y=D.s[SY]||(D.s[SY
 const keyOf=(name,c)=>name==="anagrafica"?c.uid:c.sigla;
 // alla nuova stagione si riportano le impostazioni del cliente, non l'avanzamento
 const CARRY={controlli:["coll","canale","escl","extra"],dichiarativi:["coll","nd"],general:["toc","pc","fc"],
-  inventari:["inv","chi","coll"],audit:["coll"],circolarizzazioni:["attiva"]};
+  inventari:["inv","chi","coll"],audit:["coll"],circolarizzazioni:["attiva","foff"]};
 function carry(name,c,p){(CARRY[name]||[]).forEach(f=>{if(p[f]!==undefined)c[f]=clone(p[f]);});
   if(name==="inventari"&&p.conf)c.prev=p.conf;
   if(name==="audit"&&p.st)Object.keys(c.st).forEach(k=>{if(p.st[k]===3)c.st[k]=3;else if(c.st[k]===3)c.st[k]=0;});}
@@ -497,6 +497,7 @@ function openDrawer(id){
       :`<label class="chk"><input type="checkbox" id="e_${k}" data-e="${k}" ${e[k]?"checked":""}> Fatto</label>`}</div>`).join("")}
     <label class="f"><span>Previsione chiusura</span><input type="date" id="e_previsione" data-e="previsione" value="${e.previsione||""}"></label>
     <label class="f"><span>Controllo qualità</span><select id="e_cq" data-e="cq" data-bool="1"><option value="0" ${!e.cq?"selected":""}>No</option><option value="1" ${e.cq?"selected":""}>Sì</option></select></label>
+    <label class="chk" style="grid-column:1/-1"><input type="checkbox" id="e_nuovo" data-e="nuovo" ${e.nuovo?"checked":""}> Nuovo cliente</label>
     <label class="f full"><span>Note</span><textarea id="e_note" data-e="note" rows="2">${esc(e.note)}</textarea></label>
     ${past.some(k=>c.esercizi[k].cq)?`<div class="hist">${past.filter(k=>c.esercizi[k].cq).map(k=>`<span class="pill ok">CQ ${k}</span>`).join("")}</div>`:""}
   </fieldset>`;
@@ -552,8 +553,18 @@ APP.ana=clients;APP.sec['anagrafica']={render:()=>render()};
 #sec-circolarizzazioni .srow .dot.d{border-radius:3px}
 #sec-circolarizzazioni .srow .dot.s{border-radius:2px;transform:rotate(45deg) scale(.85)}
 #sec-circolarizzazioni .srow .ck{justify-self:start}
-#sec-circolarizzazioni .genrow{grid-column:1/-1;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
-#sec-circolarizzazioni .genrow .f{flex:1 1 150px}
+#sec-circolarizzazioni .srow .l.lm{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#sec-circolarizzazioni .mailbtn{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--surface);color:var(--accent);border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex:none}
+#sec-circolarizzazioni .mailbtn svg{width:13px;height:13px}
+#sec-circolarizzazioni .mailbtn[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent)}
+#sec-circolarizzazioni .nomail{font-size:12px;color:var(--muted);font-style:italic;font-weight:400;flex:none}
+#sec-circolarizzazioni .mailbox{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;background:var(--sunk);border-radius:10px;padding:12px}
+#sec-circolarizzazioni .mailbox textarea{font-family:var(--f-body);font-size:13px;min-height:230px;width:100%}
+#sec-circolarizzazioni .row2{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#sec-circolarizzazioni .alert{display:flex;gap:8px;align-items:flex-start;background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:12.5px;font-weight:600}
+#sec-circolarizzazioni .alert svg{flex:none;width:16px;height:16px;margin-top:1px}
+#sec-circolarizzazioni .gen .f{max-width:200px}
+#sec-circolarizzazioni .flist .chk.off{color:var(--muted)}
 #sec-circolarizzazioni .btn:disabled{opacity:.45;cursor:not-allowed}
 #sec-circolarizzazioni .srow.on.s .dot{background:var(--warn);border-color:var(--warn)}
 #sec-circolarizzazioni .gen{grid-column:1/-1;display:flex;flex-direction:column;gap:10px;background:var(--sunk);border-radius:10px;padding:12px}
@@ -621,8 +632,8 @@ let SEEDED=0;function SYNC(){clients.forEach(c=>{const a=A(c.sigla);if(!a)return
 const PERSONE=["Nicolò","Giada","Andrea"];
 const REGOLE={avvioPreavviso:60,avvioTermine:45,sollecitoFirmate:15,sollecitoTerzi:15,sollecitoPartitari:10};
 // tipo: d = data, c = spunta, s = sollecito (spunta)
-const P1=[["inv","Invio file e format al cliente","d"],["solF","Sollecito lettere firmate","s"],["firm","Lettere firmate ricevute","c"],["pec","Invio PEC","d"],["sol","Sollecito","s"]];
-const P2=[["ric","Richiesta partitari","d"],["part","Partitari ricevuti","c"],["sel","Selezione statistica","c"],["inv","Invio file e format al cliente","d"],["solF","Sollecito lettere firmate","s"],["firm","Lettere firmate ricevute","c"],["pec","Invio PEC","d"],["sol","Sollecito","s"]];
+const P1=[["inv","Invio file e format al cliente","d","inv"],["solF","Sollecito lettere firmate","s","solF"],["firm","Lettere firmate ricevute","c"],["pec","Invio PEC","d"],["sol","Sollecito","s"]];
+const P2=[["ric","Richiesta partitari","d","ric"],["part","Partitari ricevuti","c"],["sel","Selezione statistica","c"],["inv","Invio file e format al cliente","d","inv"],["solF","Sollecito lettere firmate","s","solF"],["firm","Lettere firmate ricevute","c"],["pec","Invio PEC","d"],["sol","Sollecito","s"]];
 const F1=["Banche","Legali","Fiscalista","Consulente del lavoro","Assicurazioni","Assicurazione crediti","Mutui e finanziamenti","Leasing","Factor","Recupero crediti"];
 const F2=["Clienti","Clienti (inglese)","Fornitori","Fornitori (inglese)","Agenti","Agenti (inglese)","Depositari","Depositari (inglese)","Infragruppo","Infragruppo (inglese)"];
 
@@ -711,34 +722,57 @@ $("rows").onclick=e=>{const tr=e.target.closest("tr[data-id]");if(!tr)return;con
   openDrawer(c.id);};
 $("rows").onkeydown=e=>{if(e.key==="Enter"){const tr=e.target.closest("tr[data-id]");if(tr)openDrawer(+tr.dataset.id);}};
 
-let openId=null;
+let openId=null,mailOpen=null;
+// ---- mail dai modelli Outlook ----
+const IC_MAIL='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M2 4l6 5 6-5"/></svg>';
+const IC_WARN='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.8l6.5 12H1.5z"/><path d="M8 6.5v3.5M8 12v.1"/></svg>';
+const mailTo=c=>{const a=A(c.sigla);if(!a||a.viaPartner)return "";const m=String(a.contatto||"").trim();return /^[^\s@;,]+@[^\s@;,]+\.[^\s@;,]+$/.test(m)?m:"";};
+const isNuovo=c=>{const a=A(c.sigla);return !!(a&&AX(a).nuovo);};
+const subj=c=>`REVISIONE ${X}: Circolarizzazioni - ${c.nome}`;
+function mailBody(c,part,kind){
+  const fine="\n\nGrazie\nSaluti";
+  if(kind==="ric")return [`Circolarizzazioni ${X} - ${c.nome}`,`Buongiorno,\ndovremmo procedere con la seconda parte delle circolarizzazioni, ci occorre un bilancio di verifica al ${chiusuraTxt(c)} e i partitari clienti e fornitori.\n\nPer quanto riguarda il bilancio di verifica non occorre sia già in versione definitiva, ci serve principalmente il dato [BENCHMARK SIGNIFICATIVITA']; mentre per i fornitori ci occorre un'estrazione con il dettaglio dei progressivi dare-avere.\n\nVi chiediamo inoltre di segnalarci agenti, depositari (c/terzisti e c/lavoro) e intercompany, in modo che possano essere escluse dalla selezione e circolarizzati separatamente rispetto a clienti e fornitori.`+fine];
+  if(kind==="solF")return [`SOLLECITO: ${subj(c)}`,`Buongiorno,\nricordo che ci occorrono le lettere firmate e il file compilato con gli indirizzi pec, inviati con mail del ${fmt(c[part].inv)}, per poter procedere con l'invio.\n\nRicordo inoltre di modificare la data di risposta all'interno delle lettere.`+fine];
+  if(part==="p2")return [subj(c),`Buongiorno,\na seguito delle nostre analisi, abbiamo provveduto alla selezione di clienti e fornitori.\n\nIn allegato troverete i format relativi alle lettere ed il file excel di riepilogo (con i risultati della nostra selezione) da compilare con tutti gli indirizzi pec e da inviarci, ricordiamo di allegare l'estratto conto alla lettera destinata ai clienti.\n\nRicordiamo inoltre che i format delle lettere sono da compilare su carta intestata (a firma del rappresentante legale) e da inviarci a mezzo e-mail in formato .pdf, successivamente noi provvederemo con l'invio.`+fine];
+  if(isNuovo(c))return [subj(c),`Buongiorno,\nnell'ambito delle nostre procedure di circolarizzazione, inoltriamo in allegato il modulo da compilare con tutti i nominativi interessati alla procedura e i relativi indirizzi pec.\n\nRimangono al momento esclusi dal processo di circolarizzazione eventuali agenti, intercompany depositari esterni oltre a clienti e fornitori per i quali verrà fatta una selezione a campione successivamente.\n\nAlleghiamo inoltre i format delle lettere da compilare su carta intestata (a firma del rappresentante legale) da inviarci a mezzo e-mail in formato .pdf, affinché noi possiamo poi procedere all'invio ai destinatari finali.\n\nRimaniamo a disposizione per eventuali chiarimenti.`+fine];
+  return [subj(c),`Buongiorno,\nnell'ambito delle nostre procedure di circolarizzazione, inoltriamo modulo da compilare con tutti i nominativi e i relativi indirizzi PEC, per comodità abbiamo già inserito i soggetti circolarizzati lo scorso esercizio, da modificare nel caso in cui dovessero essere intervenute variazioni.\n\nA riguardo facciamo presente la necessità di segnalarci eventuali:\n•  Nuovi legali a cui sono state affidate pratiche nel corso dell'esercizio;\n•  Nuove agenzie assicurative/broker con cui sono state stipulate polizze;\n•  Nuovi consulenti aziendali/fiscali;\n•  Nuovi rapporti bancari (conti correnti, mutui, finanziamenti, ecc..);\n•  Nuovi contratti di leasing e/o factoring.\n\nNel caso di chiusura di rapporti si prega di segnalarci le eventuali cessazioni fornendoci, ove possibile, la relativa documentazione (in particolar modo nel caso di estinzione di rapporti bancari).\n\nRimangono al momento esclusi dal processo di circolarizzazione eventuali agenti, intercompany depositari esterni oltre a clienti e fornitori per i quali verrà fatta una selezione a campione successivamente.\n\nAlleghiamo inoltre i format delle lettere da compilare su carta intestata (a firma del rappresentante legale) e da inviarci a mezzo e-mail in formato .pdf, affinché noi possiamo poi procedere all'invio ai destinatari finali.`+fine];
+}
+const mailText=(c,part,kind)=>{const [o,b]=mailBody(c,part,kind);return `A: ${mailTo(c)}\nOggetto: ${o}\n\n${b}`;};
+function mailCtl(c,part,k,kind){
+  if(!kind||(kind==="solF"&&!c[part].inv))return "";
+  if(!mailTo(c))return `<span class="nomail">nessuna mail in anagrafica</span>`;
+  return `<button type="button" class="mailbtn" data-mail="${part}:${k}:${kind}" aria-pressed="${mailOpen===part+":"+k+":"+kind}">${IC_MAIL}Mail</button>`;
+}
+function mailBox(c,part,k,kind){
+  if(mailOpen!==part+":"+k+":"+kind||!mailTo(c))return "";
+  return `<div class="mailbox">${kind==="ric"?`<div class="alert">${IC_WARN}<span>Prima di inviare completa in Outlook il campo [BENCHMARK SIGNIFICATIVITA'].</span></div>`:""}
+    <textarea id="mailtxt" readonly aria-label="Testo della mail">${esc(mailText(c,part,kind))}</textarea>
+    <div class="row2"><button type="button" class="btn" data-out="1">Apri in Outlook</button><button type="button" class="btn ghost" data-copy="1">Copia testo</button><span class="toast" id="copied"></span></div></div>`;
+}
+const foff=(c,part)=>((c.foff||{})[part])||[];
 function partBlock(c,part,steps,title){
-  const p=c[part],fl=part==="p1"?F1:F2,term=p.term||"";
+  const p=c[part],fl=part==="p1"?F1:F2,term=p.term||"",off=foff(c,part);
   return `<fieldset><legend>${title}</legend>
   <label class="f full"><span>Incaricato PEC e risposte</span><select id="${part}_inc" data-p="${part}" data-inc="1">${["",...PERSONE].map(x=>`<option ${p.inc===x?"selected":""}>${x}</option>`).join("")}</select></label>
-  ${steps.map(([k,l,t])=>`<div class="srow ${p[k]?"on":""} ${t==="s"?"s":""}"><span class="dot ${t}"></span><span class="l">${l}</span>${t==="d"
+  ${steps.map(([k,l,t,kind])=>`<div class="srow ${p[k]?"on":""} ${t==="s"?"s":""}"><span class="dot ${t}"></span><span class="l lm"><span>${l}</span>${mailCtl(c,part,k,kind)}</span>${t==="d"
     ?`<input type="date" id="${part}_${k}" data-p="${part}" data-k="${k}" data-t="d" value="${p[k]||""}" aria-label="${l}">`
-    :`<input type="checkbox" class="ck" id="${part}_${k}" data-p="${part}" data-k="${k}" data-t="${t}" ${p[k]?"checked":""} aria-label="${l}">`}</div>`).join("")}
+    :`<input type="checkbox" class="ck" id="${part}_${k}" data-p="${part}" data-k="${k}" data-t="${t}" ${p[k]?"checked":""} aria-label="${l}">`}${mailBox(c,part,k,kind)}</div>`).join("")}
   <div class="nums">
     <label class="f"><span>Inviate</span><input type="number" min="0" id="${part}_r0" data-p="${part}" data-r="0" value="${p.r[0]}"></label>
     <label class="f"><span>Ricevute</span><input type="number" min="0" id="${part}_r1" data-p="${part}" data-r="1" value="${p.r[1]}"></label>
     <label class="f"><span>Viste</span><input type="number" min="0" id="${part}_r2" data-p="${part}" data-r="2" value="${p.r[2]}"></label>
   </div>
-  <div class="genrow">
+  <div class="gen" id="gen_${part}">
     <label class="f"><span>Data risposta nei format</span><input type="date" id="${part}_term" data-p="${part}" data-term="1" value="${term}"></label>
-    <button type="button" class="btn ghost" data-gen="${part}" ${term?"":"disabled"}>Genera format</button>
-  </div>
-  <div class="gen" id="gen_${part}" hidden>
     <div class="ro"><span>Esercizio chiuso al</span><b>${chiusuraTxt(c)}</b></div>
     <div class="ro"><span>Periodo</span><b>${apertura(c)} – ${chiusuraTxt(c)}</b></div>
-    <div class="ro"><span>Risposta entro</span><b>${fmt(term)}</b></div>
-    <div class="flist">${fl.map((f,i)=>`<label class="chk"><input type="checkbox" id="${part}_f${i}" data-fsel="1" checked> ${f}</label>`).join("")}</div>
-    <button type="button" class="btn" data-dl="${part}">Scarica format</button>
-    <span class="toast" id="toast_${part}" hidden></span>
+    <div class="flist">${fl.map((f,i)=>{const on=!off.includes(f);return `<label class="chk${on?"":" off"}"><input type="checkbox" id="${part}_f${i}" data-fsel="${part}" data-f="${esc(f)}" ${on?"checked":""}> ${f}</label>`;}).join("")}</div>
+    <div class="row2"><button type="button" class="btn" data-dl="${part}" ${term?"":"disabled"}>Scarica format</button>
+    <span class="toast" id="toast_${part}">${term?"":"Inserisci la data di risposta"}</span></div>
   </div></fieldset>`;
 }
 function openDrawer(id){
-  openId=id;const c=clients.find(x=>x.id===id),a=action(c);
+  if(openId!==id)mailOpen=null;openId=id;const c=clients.find(x=>x.id===id),a=action(c);
   $("dSigla").textContent=c.sigla;$("dTitle").textContent=c.nome;
   $("dBody").innerHTML=`<div class="ro"><span>Prossima azione</span><span class="pill ${a.cls}">${a.txt}</span></div>
   <label class="chk"><input type="checkbox" id="att" data-att="1" ${c.attiva?"checked":""}> Circolarizzazioni attive${c.tipo!=="Diretto"?" ("+c.tipo.toLowerCase()+")":""}</label>
@@ -747,8 +781,8 @@ function openDrawer(id){
   $("drawerBox").hidden=false;
 }
 $("dBody").addEventListener("change",ev=>{const t=ev.target,c=clients.find(x=>x.id===openId);if(!c)return;
-  if(t.dataset.fsel)return;
-  if(t.dataset.att)c.attiva=t.checked;
+  if(t.dataset.fsel){const pt=t.dataset.fsel,f=t.dataset.f,o=foff(c,pt).filter(x=>x!==f);if(!t.checked)o.push(f);c.foff=Object.assign({},c.foff,{[pt]:o});}
+  else   if(t.dataset.att)c.attiva=t.checked;
   else if(t.dataset.nop2)c.noP2=t.checked;
   else if(t.dataset.note)c.note=t.value;
   else if(t.dataset.r!==undefined)c[t.dataset.p].r[+t.dataset.r]=+t.value||0;
@@ -756,8 +790,12 @@ $("dBody").addEventListener("change",ev=>{const t=ev.target,c=clients.find(x=>x.
   else if(t.dataset.term)c[t.dataset.p].term=t.value;
   else if(t.dataset.k){const p=c[t.dataset.p];p[t.dataset.k]=t.dataset.t==="d"?(t.value||null):(t.checked?iso(TODAY):null);}
   render();openDrawer(openId);const again=$(t.id);if(again)again.focus();});
-$("dBody").addEventListener("click",ev=>{const g=ev.target.closest("[data-gen]");if(g&&!g.disabled){const box=$("gen_"+g.dataset.gen);box.hidden=!box.hidden;return;}
-  const dl=ev.target.closest("[data-dl]");if(dl){const part=dl.dataset.dl,c=clients.find(x=>x.id===openId),fl=part==="p1"?F1:F2;
+$("dBody").addEventListener("click",ev=>{const cc=clients.find(x=>x.id===openId);if(!cc)return;
+  const mb=ev.target.closest("[data-mail]");if(mb){mailOpen=mailOpen===mb.dataset.mail?null:mb.dataset.mail;openDrawer(openId);return;}
+  const ob=ev.target.closest("[data-out]");if(ob&&mailOpen){const [pt,k]=mailOpen.split(":");OUTLOOK($("mailtxt").value);
+    const p=cc[pt];if(!p[k])p[k]=ISO();mailOpen=null;render();openDrawer(openId);return;}
+  const cb=ev.target.closest("[data-copy]");if(cb){const t=$("mailtxt");navigator.clipboard.writeText(t.value).then(()=>$("copied").textContent="Copiato").catch(()=>{t.select();$("copied").textContent="Testo selezionato";});return;}
+  const dl=ev.target.closest("[data-dl]");if(dl&&!dl.disabled){const part=dl.dataset.dl,c=clients.find(x=>x.id===openId),fl=part==="p1"?F1:F2;
   const sel=fl.filter((f,i)=>{const el=$(`${part}_f${i}`);return el&&el.checked;}),t=$("toast_"+part);t.hidden=false;
   if(!sel.length){t.textContent="Seleziona almeno un format";return;}
   t.textContent="Preparazione…";genFormats(c,part,sel).then(n=>{t.textContent=n;}).catch(e=>{t.textContent="Errore: "+e.message;});}});
