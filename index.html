@@ -159,7 +159,7 @@ const SY=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
 APP.SY=SY;
 let D=null;try{D=JSON.parse(localStorage.getItem(KEY)||"null");}catch(e){}
 if(!D||typeof D!=="object")D={};
-D.v=1;D.ana=D.ana||{};D.s=D.s||{};D.lead=D.lead||{};D.ore=D.ore||{};D.oreX=D.oreX||{};
+D.v=1;D.ana=D.ana||{};D.s=D.s||{};D.lead=D.lead||{};D.ore=D.ore||{};D.oreX=D.oreX||{};D.trips=D.trips||{};D.notes=D.notes||{};D.pays=D.pays||{};D.tset=D.tset||{};
 APP.data=D;
 APP.empty=()=>!Object.keys(D.ana).length;
 const clone=v=>v===undefined?undefined:JSON.parse(JSON.stringify(v));
@@ -208,6 +208,7 @@ function mergeMap(L,R){let ca=false,cb=false;
 function merge(L,R){let ca=false,cb=false;const acc=([a,b])=>{ca=ca||a;cb=cb||b;};
   R=R||{};acc(mergeMap(L.ana,R.ana||{}));acc(mergeMap(L.lead,R.lead||{}));
   acc(mergeMap(L.ore||(L.ore={}),R.ore||{}));acc(mergeMap(L.oreX||(L.oreX={}),R.oreX||{}));
+  ["trips","notes","pays","tset"].forEach(n=>acc(mergeMap(L[n]||(L[n]={}),R[n]||{})));
   const ys=new Set([...Object.keys(L.s),...Object.keys(R.s||{})]);
   ys.forEach(y=>{const ly=L.s[y]||(L.s[y]={}),ry=(R.s||{})[y]||{};
     new Set([...Object.keys(ly),...Object.keys(ry)]).forEach(n=>{acc(mergeMap(ly[n]||(ly[n]={}),ry[n]||{}));});});
@@ -2419,6 +2420,50 @@ APP.sec['bilanci']={render:()=>render()};
 #sec-ore .rep{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 #sec-ore .linkb{border:0;background:none;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:0;text-align:left}
 #sec-ore .linkb:disabled,#sec-ore .btn:disabled{opacity:.5;cursor:default}
+/* trasferte e note spese */
+#sec-ore .card h3{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+#sec-ore .card h3 b{font-family:var(--f-mono);font-weight:500;color:var(--fg);letter-spacing:0;text-transform:none;font-size:13px}
+#sec-ore .tform{display:grid;grid-template-columns:minmax(0,1.6fr) auto;gap:8px;align-items:end}
+#sec-ore .tform2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,2.2fr);gap:8px;align-items:end}
+#sec-ore .fl{display:flex;flex-direction:column;gap:3px;min-width:0}
+#sec-ore .fl>span{font-size:11.5px;color:var(--muted)}
+#sec-ore .fl input.num{font-family:var(--f-mono);text-align:right}
+#sec-ore .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface);height:38px}
+#sec-ore .seg button{border:0;background:none;padding:0 12px;font:inherit;font-size:13px;color:var(--fg);cursor:pointer}
+#sec-ore .seg button+button{border-left:1px solid var(--line)}
+#sec-ore .seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg)}
+#sec-ore .tcalc{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--sunk);border-radius:8px;padding:8px 12px;font-size:13px}
+#sec-ore .tcalc .mono b{font-weight:500}
+#sec-ore .trip{display:grid;grid-template-columns:minmax(0,1fr) auto 34px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+#sec-ore .trip:first-child{border-top:1px solid var(--line)}
+#sec-ore .trip .t{font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sec-ore .trip .s{font-size:12px;color:var(--muted);display:block}
+#sec-ore .trip .s a{color:var(--accent)}
+#sec-ore .trip .v{font-family:var(--f-mono);font-size:13px}
+#sec-ore .x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;border-radius:6px;height:30px}
+#sec-ore .x:hover{background:var(--crit-soft);color:var(--crit)}
+#sec-ore .nrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:6px 6px;margin:0 -6px;border-radius:7px;cursor:pointer;border:0;background:none;font:inherit;color:var(--fg);text-align:left;width:calc(100% + 12px)}
+#sec-ore .nrow:hover{background:var(--sunk)}
+#sec-ore .nrow .m{font-size:13px;font-weight:600}
+#sec-ore .nrow .q{font-size:12px;color:var(--muted);grid-column:1}
+#sec-ore .nrow .eur{font-family:var(--f-mono);font-size:12.5px;grid-row:1;grid-column:2;text-align:right}
+#sec-ore .nrow .pill{grid-column:2;justify-self:end}
+#sec-ore .rowlinks{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+#sec-ore .dbody .ro{display:flex;justify-content:space-between;gap:10px;background:var(--sunk);border-radius:8px;padding:9px 12px;font-size:13.5px}
+#sec-ore .dbody .ro b{font-family:var(--f-mono);font-weight:500}
+#sec-ore .dtab{width:100%;border-collapse:collapse;font-size:13px}
+#sec-ore .dtab td{padding:6px 4px;border-bottom:1px solid var(--line)}
+#sec-ore .dtab td.r{text-align:right;font-family:var(--f-mono)}
+#sec-ore .dtab tr:last-child td{border-bottom:0;font-weight:600}
+#sec-ore .mailbox textarea{width:100%;min-height:170px;font:inherit;font-size:13px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px}
+#sec-ore .prow2{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line)}
+#sec-ore .prow2 b{font-family:var(--f-mono);font-weight:500}
+#sec-ore .diff{display:flex;justify-content:space-between;font-size:13.5px;padding:9px 12px;border-radius:8px;background:var(--sunk)}
+#sec-ore .diff.ok{background:var(--ok-soft);color:var(--ok)} .diff.ko{background:var(--warn-soft);color:var(--warn)}
+#sec-ore .diff b{font-family:var(--f-mono);font-weight:500}
+#sec-ore .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:620px){#sec-ore .tform2{grid-template-columns:repeat(3,minmax(0,1fr))}#sec-ore .tform2 .lk{grid-column:1/-1}#sec-ore .tform{grid-template-columns:1fr}}
+#sec-ore .card+.week{margin-top:0}
 @media (max-width:900px){#sec-ore .ogrid{grid-template-columns:1fr}}
 @media (max-width:520px){#sec-ore .entry{grid-template-columns:80px minmax(0,1fr)}#sec-ore .entry .btn{grid-column:1/-1}#sec-ore .count b{font-size:34px}}
 </style>
@@ -2446,10 +2491,31 @@ APP.sec['bilanci']={render:()=>render()};
         <div class="rows" id="oRows"></div>
       </div>
       <div class="week" id="oWeek"></div>
+      <div class="card" id="tCard">
+        <h3><span>Trasferte</span><b id="tDayTot"></b></h3>
+        <form id="tForm" autocomplete="off" style="display:flex;flex-direction:column;gap:10px">
+          <div class="tform">
+            <label class="fl"><span>Cliente</span><select id="tC"></select></label>
+            <div class="fl"><span>Motivo</span><div class="seg" id="tMot" role="group" aria-label="Motivo"><button type="button" data-m="audit" aria-pressed="true">Audit</button><button type="button" data-m="inventario" aria-pressed="false">Inventario</button><button type="button" data-m="" aria-pressed="false">Nessuno</button></div></div>
+          </div>
+          <div class="tform2">
+            <label class="fl"><span>Km</span><input id="tKm" class="num" inputmode="decimal" placeholder="0"></label>
+            <label class="fl"><span>Pedaggio €</span><input id="tPed" class="num" inputmode="decimal" placeholder="0"></label>
+            <label class="fl"><span>Pranzo €</span><input id="tPra" class="num" inputmode="decimal" placeholder="0"></label>
+            <label class="fl lk"><span>Link percorso Google Maps</span><input id="tLink" placeholder="Incolla il link"></label>
+          </div>
+          <div class="tcalc"><span class="mono" id="tCalc"></span><button class="btn" type="submit">Aggiungi trasferta</button></div>
+        </form>
+        <div id="tList"></div>
+      </div>
     </div>
     <aside class="side">
       <div class="box"><h4><span id="oMonT"></span></h4><div class="cal" id="oCal"></div><div id="oMonK"></div></div>
       <div class="box"><h4><span id="oYearT"></span><b class="mono" id="oYearTot"></b></h4><div class="tops" id="oTops"></div></div>
+      <div class="box"><h4><span>Note spese</span><button type="button" class="linkb" id="nHist" style="font-size:12px;text-transform:none;letter-spacing:0"></button></h4>
+        <div id="nList"></div>
+        <div class="rowlinks"><button type="button" class="btn ghost" id="nPay">Registra pagamento</button><button type="button" class="linkb" id="nSet">Impostazioni</button></div>
+      </div>
       <div class="box"><h4>Report annuale</h4>
         <div class="rep"><select id="oRepY" aria-label="Anno del report"></select><button type="button" class="btn" id="oRep">Scarica Excel</button></div>
         <div class="rep"><button type="button" class="linkb" id="oImpB">Importa timesheet Excel</button></div>
@@ -2458,11 +2524,18 @@ APP.sec['bilanci']={render:()=>render()};
     </aside>
   </div>
 </div>
+<div id="oDBox" hidden>
+  <div class="scrim" id="oDScrim"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="oDTitle">
+    <div class="dhead"><div><h2 id="oDTitle"></h2></div><button class="close" id="oDClose" aria-label="Chiudi">×</button></div>
+    <div class="dbody" id="oDBody"></div>
+  </aside>
+</div>
 </section>
 <script>(function(root){
 // dati: APP.data.ore[aaaa-mm-gg] = {commessa: ore, _f:{commessa: istante}}; APP.data.oreX[id] = {nome} (clienti fuori dal gestionale, solo da importazione)
 // commesse: "a:…" attività, "c:<uid>" clienti dell'anagrafica, "x:<id>" altri clienti
-const D=APP.data;D.ore=D.ore||{};D.oreX=D.oreX||{};
+const D=APP.data;D.ore=D.ore||{};D.oreX=D.oreX||{};D.trips=D.trips||{};D.notes=D.notes||{};D.pays=D.pays||{};D.tset=D.tset||{};
 const $=id=>root.querySelector("#"+id);
 const pad=n=>String(n).padStart(2,"0");
 const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -2511,6 +2584,7 @@ function agenda(){const T=[],ini=inizio(),d=new Date(TODAY);
     if(lavorativo(d)&&(i===0||(ini&&k>=ini))){const t=dayTot(k);
       if(t<OBJ)T.push({id:k,sigla:"",nome:`${fh(t)} di ${OBJ} ore${t?` · mancano ${fh(OBJ-t)}`:""}`,txt:i===0?"Segnare le ore":"Ore incomplete",cls:i===0?"warn":"crit",d:new Date(d),sym:"o"});}
     d.setDate(d.getDate()-1);}
+  T.push(...agendaNote());
   return {T,prog:null};}
 
 // ---- giornata ----
@@ -2563,6 +2637,7 @@ function render(){
   const ys=new Set(Object.keys(D.ore).filter(dk=>dayTot(dk)>0).map(x=>+x.slice(0,4)));ys.add(TODAY.getFullYear());
   const prev=$("oRepY").value;$("oRepY").innerHTML=[...ys].sort((a,b)=>b-a).map(v=>`<option>${v}</option>`).join("");
   $("oRepY").value=prev&&ys.has(+prev)?prev:String(y);
+  renderTrips();
 }
 const num=v=>{v=String(v||"").trim().replace(",",".");if(!v)return NaN;return Math.round(parseFloat(v)*100)/100;};
 function toast(t){let b=document.getElementById("gBar");if(!b){b=document.createElement("div");b.id="gBar";b.className="gbar";document.body.appendChild(b);}
@@ -2665,6 +2740,151 @@ $("oImp").onchange=async()=>{const f=$("oImp").files[0];$("oImp").value="";if(!f
     APP.changed();render();toast(`Importate ${fh(n)} ore su ${Object.keys(nuovo).length} giorni (${year})${nuovi?` · ${nuovi} clienti aggiunti`:""}`);
   }catch(e){toast("Importazione non riuscita: "+e.message);}
   btn.disabled=false;};
+
+// ===================== trasferte e note spese =====================
+// dati: D.trips[id] = {d,c,mot,km,link,ped,pra,tar,del}; D.notes[aaaa-mm] = {sent,paid,pay}; D.pays[id] = {d,imp,notes}; D.tset.main = {tar,tarY,carb,marca,mod,to1,to2}
+// ogni record ha _f (istante per campo) per l'unione fra dispositivi; una trasferta eliminata resta con del=1
+const TSET0={tar:.4681,tarY:2026,carb:"",marca:"",mod:"",to1:"",to2:""};
+function rec(map,k){return map[k]||(map[k]={_f:{}});}
+function setF(r,o){const now=Date.now();r._f=r._f||{};for(const f in o){r[f]=o[f];r._f[f]=now;}APP.changed();}
+const TS=()=>Object.assign({},TSET0,D.tset.main||{});
+const eur=n=>(Math.round(n*100)/100).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
+const ddmm=s=>s?s.slice(8,10)+"/"+s.slice(5,7)+"/"+s.slice(0,4):"";
+const ym=d=>d.slice(0,7);
+const mLab=k=>MESI[+k.slice(5,7)-1].toLowerCase()+" "+k.slice(0,4);
+const mLabU=k=>MESI[+k.slice(5,7)-1]+" "+k.slice(0,4);
+const tripTot=t=>(+t.km||0)*(+t.tar||0)+(+t.ped||0)+(+t.pra||0); // come nell'Excel; arrotondato solo in visualizzazione
+const trips=()=>Object.keys(D.trips).filter(id=>D.trips[id]&&!D.trips[id].del&&D.trips[id].d).map(id=>Object.assign({id},D.trips[id]));
+const curMonth=()=>iso(TODAY).slice(0,7);
+function noteList(){const m={};
+  trips().forEach(t=>{const k=ym(t.d);(m[k]||(m[k]={k,trips:[],tot:0})).trips.push(t);m[k].tot+=tripTot(t);});
+  return Object.values(m).sort((a,b)=>b.k.localeCompare(a.k)).map(n=>{const r=D.notes[n.k]||{};return Object.assign(n,{sent:r.sent||null,paid:r.paid||null});});}
+function stNote(n){if(n.paid)return {t:"pagata "+ddmm(n.paid).slice(0,5),c:"ok"};if(n.sent)return {t:"inviata "+ddmm(n.sent).slice(0,5),c:"neu"};
+  if(n.k>=curMonth())return {t:"in corso",c:"neu"};return {t:"da inviare",c:"warn"};}
+// avvisi: nota da inviare dal 1° del mese dopo (rossa dopo 15 giorni); tariffa ACI da aggiornare da gennaio
+function agendaNote(){const T=[];
+  noteList().filter(n=>!n.sent&&!n.paid&&n.k<curMonth()).forEach(n=>{const [y,m]=n.k.split("-").map(Number),d=new Date(y,m,1);
+    T.push({id:"",sigla:"",nome:`${n.trips.length} ${n.trips.length===1?"trasferta":"trasferte"} · ${eur(n.tot)}`,txt:"Inviare nota spese "+mLab(n.k),cls:(TODAY-d)/864e5>15?"crit":"warn",d,sym:"d"});});
+  const ts=TS();if(+ts.tarY<TODAY.getFullYear())T.push({id:"",sigla:"",nome:`tariffa in uso ${ts.tarY}: ${String(ts.tar).replace(".",",")} €/km`,txt:"Aggiornare tariffa ACI "+TODAY.getFullYear(),cls:"warn",d:new Date(TODAY.getFullYear(),0,1),sym:"s"});
+  return T;}
+
+// ---- riquadro trasferte della giornata ----
+let tMot="audit",nHistOn=false;
+function tOptions(){const r=vals(iso(sel)),C=clienti().filter(c=>c.attivo).sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  const oggi=C.filter(c=>r[c.k]>0),altri=C.filter(c=>!(r[c.k]>0)),v=$("tC").value;
+  $("tC").innerHTML=(oggi.length?`<optgroup label="Con ore oggi">${oggi.map(c=>`<option value="${c.k}">${esc(label(c))}</option>`).join("")}</optgroup>`:"")+
+    `<optgroup label="Clienti">${altri.map(c=>`<option value="${c.k}">${esc(label(c))}</option>`).join("")}</optgroup>`;
+  if(v&&C.some(c=>c.k===v))$("tC").value=v;}
+function tCalc(){const km=num($("tKm").value)||0,ped=num($("tPed").value)||0,pra=num($("tPra").value)||0,tar=TS().tar;
+  $("tCalc").innerHTML=`${fh(km)} km × ${String(tar).replace(".",",")} = <b>${eur(km*tar)}</b>${ped||pra?` + ${eur(ped+pra)}`:""} · totale <b>${eur(km*tar+ped+pra)}</b>`;}
+function renderTrips(){
+  tOptions();tCalc();
+  const k=iso(sel),L=trips().filter(t=>t.d===k);
+  $("tDayTot").textContent=L.length?eur(L.reduce((s,t)=>s+tripTot(t),0)):"";
+  $("tList").innerHTML=L.map(t=>{const c=byK(t.c),n=D.notes[ym(t.d)]||{};
+    return `<div class="trip"><span class="t">${t.mot?`<span class="sigla att">${esc(t.mot)}</span> `:""}${esc(c?c.nome:"")}<span class="s">${fh(t.km)} km${t.ped?` · pedaggio ${eur(t.ped)}`:""}${t.pra?` · pranzo ${eur(t.pra)}`:""}${t.link?` · <a href="${esc(t.link)}" target="_blank" rel="noopener">percorso</a>`:""}</span></span>
+      <span class="v">${eur(tripTot(t))}</span>${n.sent?`<span class="pill neu" title="Nota già inviata">inv.</span>`:`<button type="button" class="x" data-tdel="${t.id}" aria-label="Elimina trasferta">×</button>`}</div>`;}).join("");
+  const N=noteList(),vis=N.filter(n=>nHistOn||!n.paid);
+  $("nHist").textContent=N.some(n=>n.paid)?(nHistOn?"Nascondi pagate":"Mostra pagate"):"";
+  $("nList").innerHTML=vis.map(n=>{const s=stNote(n);return `<button type="button" class="nrow" data-note="${n.k}"><span class="m">${mLabU(n.k)}</span><span class="eur">${eur(n.tot)}</span>
+    <span class="q">${n.trips.length} ${n.trips.length===1?"trasferta":"trasferte"}</span><span class="pill ${s.c}">${s.t}</span></button>`;}).join("")||`<span class="muted">Nessuna nota spese aperta.</span>`;
+  $("nPay").disabled=!N.some(n=>n.sent&&!n.paid);
+}
+$("tMot").onclick=e=>{const b=e.target.closest("[data-m]");if(!b)return;tMot=b.dataset.m;$("tMot").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));};
+["tKm","tPed","tPra"].forEach(id=>$(id).addEventListener("input",tCalc));
+$("tForm").addEventListener("submit",e=>{e.preventDefault();const km=num($("tKm").value),c=$("tC").value;
+  if(!c){toast("Scegli il cliente");return;}if(!(km>0)){toast("Scrivi i km percorsi");$("tKm").focus();return;}
+  const k=iso(sel);if((D.notes[ym(k)]||{}).sent){toast("La nota spese di "+mLab(ym(k))+" è già stata inviata");return;}
+  setF(rec(D.trips,"t"+Date.now().toString(36)),{d:k,c,mot:tMot,km,link:$("tLink").value.trim(),ped:num($("tPed").value)||0,pra:num($("tPra").value)||0,tar:TS().tar});
+  ["tKm","tPed","tPra","tLink"].forEach(id=>$(id).value="");render();toast("Trasferta aggiunta alla nota di "+mLab(ym(k)));});
+$("tList").addEventListener("click",e=>{const b=e.target.closest("[data-tdel]");if(!b)return;setF(rec(D.trips,b.dataset.tdel),{del:1});render();});
+$("nHist").onclick=()=>{nHistOn=!nHistOn;renderTrips();};
+
+// ---- pannello laterale ----
+let dView=null,mailOn=false;
+function openD(title,html){$("oDTitle").textContent=title;$("oDBody").innerHTML=html;$("oDBox").hidden=false;}
+function closeD(){$("oDBox").hidden=true;dView=null;mailOn=false;}
+$("oDClose").onclick=closeD;$("oDScrim").onclick=closeD;
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("oDBox").hidden)closeD();});
+function titolo(t){const c=byK(t.c);return `${t.mot?t.mot.toUpperCase()+" ":""}${c?c.nome:""} ${t.d.slice(8,10)}/${t.d.slice(5,7)}/${t.d.slice(2,4)}`.trim();}
+function mailNote(n){const ts=TS();return `A: ${[ts.to1,ts.to2].filter(Boolean).join("; ")}\nOggetto: Nota spese ${mLab(n.k)}\n\nCiao Stefano,\nti inoltro la nota spese di ${mLab(n.k)}.\nGrazie\nCiao`;}
+function showNote(k){dView=k;const n=noteList().find(x=>x.k===k);if(!n){closeD();return;}const s=stNote(n),ts=TS();
+  openD("Nota spese "+mLab(k),`
+    <div class="ro"><span>Stato</span><span class="pill ${s.c}">${s.t}</span></div>
+    <table class="dtab"><tbody>${n.trips.sort((a,b)=>a.d.localeCompare(b.d)).map(t=>`<tr><td>${esc(titolo(t))}</td><td class="r">${fh(t.km)} km</td><td class="r">${eur(tripTot(t))}</td></tr>`).join("")}
+      <tr><td>Totale</td><td class="r">${fh(n.trips.reduce((a,t)=>a+(+t.km||0),0))} km</td><td class="r">${eur(n.tot)}</td></tr></tbody></table>
+    <div class="rowlinks"><button type="button" class="btn" data-x="xls">Scarica Excel</button>${ts.to1||ts.to2?`<button type="button" class="btn ghost" data-x="mail">Mail</button>`:`<span class="na">destinatari mancanti nelle impostazioni</span>`}</div>
+    ${mailOn?`<div class="mailbox"><textarea id="mTxt" readonly>${esc(mailNote(n))}</textarea><div class="rowlinks"><button type="button" class="btn" data-x="out">Apri in Outlook</button><button type="button" class="btn ghost" data-x="copy">Copia testo</button><span class="na" id="mCop"></span></div></div>`:""}
+    <div class="grid2"><label class="fl"><span>Data invio</span><input type="date" id="nSent" value="${n.sent||""}"></label>
+      <label class="fl"><span>Data pagamento</span><input type="date" value="${n.paid||""}" disabled></label></div>
+    <span class="na">${n.paid?"Pagata con il pagamento del "+ddmm(n.paid)+".":"Il pagamento si registra da \"Registra pagamento\", anche per più note insieme."}</span>`);}
+$("nList").addEventListener("click",e=>{const b=e.target.closest("[data-note]");if(b){mailOn=false;showNote(b.dataset.note);}});
+$("oDBody").addEventListener("click",async e=>{const b=e.target.closest("[data-x]");if(!b||!dView)return;const n=noteList().find(x=>x.k===dView);if(!n)return;
+  if(b.dataset.x==="mail"){mailOn=!mailOn;showNote(dView);}
+  else if(b.dataset.x==="out"){OUTLOOK($("mTxt").value);if(!n.sent)setF(rec(D.notes,n.k),{sent:ISO()});mailOn=false;renderTrips();showNote(dView);}
+  else if(b.dataset.x==="copy"){const t=$("mTxt");navigator.clipboard.writeText(t.value).then(()=>$("mCop").textContent="Copiato").catch(()=>{t.select();$("mCop").textContent="Testo selezionato";});}
+  else if(b.dataset.x==="xls"){b.disabled=true;try{const buf=await buildNota(n);saveXlsx(`${n.k.replace("-","")}_Nota_spese.xlsx`,buf);}catch(x){toast("Excel non riuscito: "+x.message);}b.disabled=false;}});
+$("oDBody").addEventListener("change",e=>{if(e.target.id==="nSent"&&dView){const v=e.target.value;if(v&&+v.slice(0,4)<1900)return;setF(rec(D.notes,dView),{sent:v||null});renderTrips();showNote(dView);}});
+
+// ---- registra pagamento (una o più note) ----
+function showPay(){dView=null;const open=noteList().filter(n=>n.sent&&!n.paid).sort((a,b)=>a.k.localeCompare(b.k));
+  openD("Registra pagamento",`
+    <div class="grid2"><label class="fl"><span>Data pagamento</span><input type="date" id="pD" value="${ISO()}"></label>
+      <label class="fl"><span>Importo ricevuto €</span><input id="pI" class="num" inputmode="decimal" placeholder="0,00"></label></div>
+    <div>${open.map(n=>`<label class="prow2"><input type="checkbox" data-pn="${n.k}" data-v="${n.tot}"><span>${mLabU(n.k)} <span class="muted">· inviata ${ddmm(n.sent)}</span></span><b>${eur(n.tot)}</b></label>`).join("")}</div>
+    <div class="diff" id="pDiff"></div>
+    <button type="button" class="btn" id="pOk" disabled>Segna come pagate</button>`);pCalc();}
+function pCalc(){const ch=[...$("oDBody").querySelectorAll("[data-pn]:checked")],sum=Math.round(ch.reduce((s,x)=>s+ +x.dataset.v,0)*100)/100,imp=num($("pI").value),d=$("pDiff");
+  if(!ch.length){d.className="diff";d.innerHTML=`<span>Scegli le note pagate</span><b></b>`;}
+  else if(isNaN(imp)){d.className="diff";d.innerHTML=`<span>Totale note scelte</span><b>${eur(sum)}</b>`;}
+  else{const df=Math.round((imp-sum)*100)/100;d.className="diff "+(df===0?"ok":"ko");d.innerHTML=`<span>${df===0?"L'importo corrisponde alle note scelte":df>0?"Importo superiore alle note scelte di":"Mancano"}</span><b>${df===0?eur(sum):eur(Math.abs(df))}</b>`;}
+  $("pOk").disabled=!ch.length;}
+$("nPay").onclick=showPay;
+$("oDBody").addEventListener("input",e=>{if(e.target.id==="pI")pCalc();});
+$("oDBody").addEventListener("change",e=>{if(e.target.dataset&&e.target.dataset.pn)pCalc();});
+$("oDBody").addEventListener("click",e=>{if(e.target.id!=="pOk")return;
+  const ks=[...$("oDBody").querySelectorAll("[data-pn]:checked")].map(x=>x.dataset.pn),d=$("pD").value&&+$("pD").value.slice(0,4)>=1900?$("pD").value:ISO();
+  const id="p"+Date.now().toString(36);setF(rec(D.pays,id),{d,imp:isNaN(num($("pI").value))?null:num($("pI").value),notes:ks});
+  ks.forEach(k=>setF(rec(D.notes,k),{paid:d,pay:id}));closeD();renderTrips();toast(ks.length===1?"Nota segnata come pagata":`${ks.length} note segnate come pagate`);});
+
+// ---- impostazioni ----
+function showSet(){dView=null;const t=TS();
+  openD("Impostazioni trasferte",`
+    <div class="grid2"><label class="fl"><span>Tariffa ACI €/km</span><input id="sTar" class="num" inputmode="decimal" value="${String(t.tar).replace(".",",")}"></label>
+      <label class="fl"><span>Anno della tariffa</span><input id="sY" class="num" inputmode="numeric" value="${esc(t.tarY)}"></label></div>
+    <span class="na">La tariffa vale per le nuove trasferte; quelle già segnate tengono la loro. A gennaio il cruscotto ricorda di aggiornarla.</span>
+    <div class="grid2"><label class="fl"><span>Carburante</span><input id="sC" value="${esc(t.carb)}"></label><label class="fl"><span>Marca</span><input id="sM" value="${esc(t.marca)}"></label></div>
+    <label class="fl"><span>Modello</span><input id="sMo" value="${esc(t.mod)}"></label>
+    <div class="grid2"><label class="fl"><span>Destinatario 1</span><input id="sT1" value="${esc(t.to1)}"></label><label class="fl"><span>Destinatario 2</span><input id="sT2" value="${esc(t.to2)}"></label></div>
+    <button type="button" class="btn" id="sOk">Salva</button>`);}
+$("nSet").onclick=showSet;
+$("oDBody").addEventListener("click",e=>{if(e.target.id!=="sOk")return;const tar=Math.round(parseFloat(String($("sTar").value).trim().replace(",","."))*10000)/10000;if(!(tar>0)){toast("Tariffa non valida");return;}
+  setF(rec(D.tset,"main"),{tar,tarY:+$("sY").value||TODAY.getFullYear(),carb:$("sC").value.trim(),marca:$("sM").value.trim(),mod:$("sMo").value.trim(),to1:$("sT1").value.trim(),to2:$("sT2").value.trim()});
+  closeD();renderTrips();toast("Impostazioni salvate");});
+
+// ---- Excel della nota spese: una colonna per trasferta, RIMBORSO per colonna e TOTALE NOTA SPESE in colonna B ----
+async function buildNota(n){
+  await lib(EXCELJS,"ExcelJS");
+  const F={name:"Century Gothic",size:11},FB={name:"Century Gothic",size:11,bold:true},EUR='_-* #,##0\\ "€"_-;\\-* #,##0\\ "€"_-;_-* "-"??\\ "€"_-;_-@_-',NUM='_-* #,##0_-;\\-* #,##0_-;_-* "-"??_-;_-@_-';
+  const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet("Nota Spese",{views:[{showGridLines:false}]}),ts=TS();
+  ws.getColumn(1).width=45;
+  const T=n.trips.slice().sort((a,b)=>a.d.localeCompare(b.d)),last=colL(1+T.length);
+  const lab=(r,t,b)=>{const c=ws.getCell(r,1);c.value=t;c.font=b?FB:F;};
+  lab(2,"Tipo di carburante");lab(3,"Marca");lab(4,"Modello");lab(6,"KM percorsi");lab(8,"Rimborso chilometrico");lab(10,"PEDAGGIO");lab(11,"PRANZO");
+  T.forEach((t,i)=>{const col=2+i,L=colL(col);ws.getColumn(col).width=25.5;
+    const set=(r,v,fmt,font)=>{const c=ws.getCell(r,col);c.value=v;c.font=font||F;if(fmt)c.numFmt=fmt;return c;};
+    const h=set(1,titolo(t),null,{name:"Century Gothic",size:10,bold:true});h.alignment={horizontal:"center",wrapText:true};
+    set(2,ts.carb);set(3,ts.marca);set(4,ts.mod);
+    set(6,+t.km||0,NUM,{name:"Century Gothic",size:10});
+    if(t.link){const c=set(7,{text:t.link,hyperlink:t.link});c.font={name:"Century Gothic",size:11,color:{argb:"FF0563C1"},underline:true};}
+    set(8,+t.tar||0);
+    set(10,+t.ped||0,EUR);set(11,+t.pra||0,EUR);
+    set(13,{formula:`+${L}6*${L}8+${L}10+${L}11`,result:tripTot(t)},EUR,FB);});
+  lab(13,"RIMBORSO",1);lab(15,"TOTALE NOTA SPESE",1);
+  const tt=ws.getCell(15,2);tt.value={formula:`+SUM(B13:${last}13)`,result:n.tot};tt.font=FB;tt.numFmt=EUR;
+  return wb.xlsx.writeBuffer();}
+function saveXlsx(name,buf){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);}
 
 APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(id))sel=pd(id);}};
 })(document.getElementById('sec-ore'));</script>
@@ -2815,7 +3035,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="22/10/2026 16:55";
+const VERSIONE="22/10/2026 21:20";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
