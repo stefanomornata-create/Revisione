@@ -159,7 +159,7 @@ const SY=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
 APP.SY=SY;
 let D=null;try{D=JSON.parse(localStorage.getItem(KEY)||"null");}catch(e){}
 if(!D||typeof D!=="object")D={};
-D.v=1;D.ana=D.ana||{};D.s=D.s||{};D.lead=D.lead||{};D.ore=D.ore||{};D.oreX=D.oreX||{};D.trips=D.trips||{};D.notes=D.notes||{};D.pays=D.pays||{};D.tset=D.tset||{};
+D.v=1;D.ana=D.ana||{};D.s=D.s||{};D.lead=D.lead||{};D.ore=D.ore||{};D.oreX=D.oreX||{};D.trips=D.trips||{};D.notes=D.notes||{};D.pays=D.pays||{};D.tset=D.tset||{};D.scadX=D.scadX||{};
 APP.data=D;
 APP.empty=()=>!Object.keys(D.ana).length;
 const clone=v=>v===undefined?undefined:JSON.parse(JSON.stringify(v));
@@ -208,7 +208,7 @@ function mergeMap(L,R){let ca=false,cb=false;
 function merge(L,R){let ca=false,cb=false;const acc=([a,b])=>{ca=ca||a;cb=cb||b;};
   R=R||{};acc(mergeMap(L.ana,R.ana||{}));acc(mergeMap(L.lead,R.lead||{}));
   acc(mergeMap(L.ore||(L.ore={}),R.ore||{}));acc(mergeMap(L.oreX||(L.oreX={}),R.oreX||{}));
-  ["trips","notes","pays","tset"].forEach(n=>acc(mergeMap(L[n]||(L[n]={}),R[n]||{})));
+  ["trips","notes","pays","tset","scadX"].forEach(n=>acc(mergeMap(L[n]||(L[n]={}),R[n]||{})));
   const ys=new Set([...Object.keys(L.s),...Object.keys(R.s||{})]);
   ys.forEach(y=>{const ly=L.s[y]||(L.s[y]={}),ry=(R.s||{})[y]||{};
     new Set([...Object.keys(ly),...Object.keys(ry)]).forEach(n=>{acc(mergeMap(ly[n]||(ly[n]={}),ry[n]||{}));});});
@@ -299,6 +299,47 @@ const DOCGEN=(()=>{
     await lib();const out=new JSZip();for(const it of items)out.file(it.name,await fill(it.key,it.vals));
     save(await out.generateAsync({type:"blob",compression:"DEFLATE"}),zipName);}
   return {itD,itL,enL,fill,save,many};
+})();
+
+// ---- scadenze fiscali: regole fisse, slittamento al primo giorno lavorativo, proroghe in APP.data.scadX[chiave] = {d, nota} ----
+// chiavi: 770_<anno>, ri_<anno> (esercizi solari al 31/12 dell'anno prima), ri_m<mese>_<anno chiusura> (non solari),
+//         lipe<1-4>_<anno>, dich_<anno d'imposta>
+const SCAD=(()=>{
+  const p2=n=>String(n).padStart(2,"0");
+  const QN=["I","II","III","IV"];
+  function pasqua(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(y,mo-1,da);}
+  const FE={};
+  function festivo(d){const y=d.getFullYear();if(!FE[y]){const p=pasqua(y);p.setDate(p.getDate()+1);FE[y]=new Set(["01-01","01-06","04-25","05-01","06-02","08-15","11-01","12-08","12-25","12-26",`${p2(p.getMonth()+1)}-${p2(p.getDate())}`]);}return FE[y].has(`${p2(d.getMonth()+1)}-${p2(d.getDate())}`);}
+  const slitta=d=>{d=new Date(d);while(d.getDay()===0||d.getDay()===6||festivo(d))d.setDate(d.getDate()+1);return d;};
+  const fine=(y,m)=>new Date(y,m,0); // m 1-12
+  const dd=d=>`${p2(d.getDate())}/${p2(d.getMonth()+1)}/${d.getFullYear()}`;
+  const pd=s=>{const [y,m,g]=s.split("-").map(Number);return new Date(y,m-1,g);};
+  const ex=()=>APP.data.scadX||(APP.data.scadX={});
+  function raw(k){let m;
+    if(m=k.match(/^770_(\d+)$/))return new Date(+m[1],9,31);
+    if(m=k.match(/^ri_(\d+)$/))return new Date(+m[1],9,31);
+    if(m=k.match(/^ri_m(\d+)_(\d+)$/)){const me=+m[1]+10;return fine(+m[2]+Math.floor((me-1)/12),((me-1)%12)+1);}
+    if(m=k.match(/^lipe(\d)_(\d+)$/)){const q=+m[1],y=+m[2];return q===4?fine(y+1,2):[null,new Date(y,4,31),new Date(y,8,30),new Date(y,10,30)][q];}
+    if(m=k.match(/^dich_(\d+)$/))return new Date(+m[1]+1,3,30);
+    return null;}
+  function nome(k){let m;
+    if(m=k.match(/^770_(\d+)$/))return [`770/${m[1]}`,`ritenute ${m[1]-1}`];
+    if(m=k.match(/^ri_(\d+)$/))return [`Redditi e IRAP ${m[1]}`,`esercizi al 31/12/${m[1]-1}`];
+    if(m=k.match(/^ri_m(\d+)_(\d+)$/))return [`Redditi e IRAP`,`esercizi al ${dd(fine(+m[2],+m[1]))}`];
+    if(m=k.match(/^lipe(\d)_(\d+)$/))return [`LIPE ${QN[m[1]-1]} trimestre`,`${m[2]}${m[1]==="4"?" · o con la dichiarazione IVA":""}`];
+    if(m=k.match(/^dich_(\d+)$/))return [`Dichiarazione IVA ${+m[1]+1}`,`anno ${m[1]}`];
+    return [k,""];}
+  function info(k){const r=raw(k);if(!r)return null;const o=slitta(r),e=ex()[k],pr=e&&e.d?pd(e.d):null,[n,s]=nome(k);
+    return {k,raw:r,ord:o,d:pr||o,pro:!!pr,nota:(e&&e.d&&e.nota)||"",nome:n,sub:s};}
+  const due=k=>{const i=info(k);return i?i.d:null;};
+  // scadenze della stagione (da settembre X ad agosto X+1)
+  function stagione(X,clienti){const da=new Date(X,8,1),a=new Date(X+1,7,31),K=new Set();
+    for(let y=X-1;y<=X+1;y++){K.add(`770_${y+1}`);K.add(`ri_${y+1}`);K.add(`dich_${y}`);for(let q=1;q<=4;q++)K.add(`lipe${q}_${y}`);}
+    const ns={};(clienti||[]).filter(c=>c.attivo!==false&&+c.mese&&+c.mese!==12).forEach(c=>{for(let y=X-1;y<=X+1;y++){const k=`ri_m${+c.mese}_${y}`;K.add(k);(ns[k]||(ns[k]=[])).push(c.sigla);}});
+    return [...K].map(info).filter(s=>s&&s.raw>=da&&s.raw<=a).map(s=>Object.assign(s,ns[s.k]?{sub:s.sub+" · "+[...new Set(ns[s.k])].join(", ")}:{})).sort((x,y)=>x.d-y.d||x.k.localeCompare(y.k));}
+  function proroga(k,d,nota){const r=ex()[k]||(ex()[k]={_f:{}});const now=Date.now();r._f=r._f||{};r.d=d||"";r.nota=nota||"";r._f.d=now;r._f.nota=now;APP.changed();}
+  const proroghe=()=>Object.keys(ex()).filter(k=>ex()[k]&&ex()[k].d).map(info).filter(Boolean);
+  return {info,due,stagione,proroga,proroghe,dd,slitta};
 })();
 
 function ISO(){const p=n=>String(n).padStart(2,"0");return `${TODAY.getFullYear()}-${p(TODAY.getMonth()+1)}-${p(TODAY.getDate())}`;}
@@ -892,6 +933,9 @@ APP.sec.circolarizzazioni.parts=()=>{const a=clients.filter(c=>c.attiva);
 #sec-controlli .prof{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
 #sec-controlli .mailbox{grid-column:1/-1;display:flex;flex-direction:column;gap:8px}
 #sec-controlli .mailbox textarea{font-family:var(--f-body);font-size:13px;min-height:220px}
+#sec-controlli .doc.fut .t,#sec-controlli .doc.fut .n{color:var(--muted)}
+#sec-controlli .futp{font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 9px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+#sec-controlli .pend{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 #sec-controlli table{min-width:980px}</style>
 <section id="sec-controlli" class="sec" hidden><span id="seasonLbl" hidden></span>
 
@@ -984,7 +1028,17 @@ function catalog(c,r){
 }
 const docsFor=(c,r,cc)=>catalog(c,r).filter(d=>d[2]&&d[2].split("·").includes(cc));
 // mancanti che fanno parte dell'elenco attuale (codici rimasti da periodi o documenti tolti non contano)
-const missOf=(c,r)=>{const ids=new Set(catalog(c,r).map(d=>d[0]));return c["r"+r].miss.filter(k=>ids.has(k));};
+// documenti legati a una scadenza fiscale (comunicazioni IVA e dichiarazione IVA): prima della scadenza non si chiedono
+function dueOf(c,r,id){const m=id.match(/^lipe(\d)_(\d+)$/);if(m)return SCAD.due(`lipe${+m[1]+1}_${m[2]}`);
+  if(id==="dich")return SCAD.due(`dich_${periods(c)["r"+r].to.getFullYear()-1}`);return null;}
+const isFut=(c,r,id)=>{const d=dueOf(c,r,id);return !!(d&&d>=TODAY);};
+// scaduto dopo il controllo dei documenti: va richiesto, finché non è segnato ricevuto o mancante
+const isPend=(c,r,id)=>{const q=c["r"+r],d=dueOf(c,r,id);return !!(d&&d<TODAY&&q.chk&&d>=pd(q.chk)&&!(q.dopo||{})[id]);};
+// mancanti che fanno parte dell'elenco attuale (codici rimasti da periodi o documenti tolti non contano), esclusi quelli non ancora scaduti o da richiedere
+const missOf=(c,r)=>{const ids=new Set(catalog(c,r).map(d=>d[0]));return c["r"+r].miss.filter(k=>ids.has(k)&&!isFut(c,r,k)&&!isPend(c,r,k));};
+const pendOf=(c,r)=>c["r"+r].sent?catalog(c,r).filter(d=>isPend(c,r,d[0])):[];
+// data da cui contare il sollecito: invio della richiesta, o la data in cui un documento scaduto dopo è stato segnato mancante
+const solBase=(c,r)=>{const q=c["r"+r],dp=q.dopo||{};return missOf(c,r).map(k=>dp[k]).filter(x=>x&&x!=="ok").concat(q.sent).sort().pop();};
 
 const FLT=a=>true,TUP=a=>[a.sigla,a.nome,a.tipo];
 const CL=APP.ana.filter(a=>a.sigla&&a.attivo!==false&&FLT(a)).map(TUP);
@@ -1004,6 +1058,7 @@ function vState(c,r,cc){
   if(!ds.length) return "na";
   if(c.v[r].includes(cc)) return "done";
   if(!req.sent||!req.chk) return "wait";
+  if(ds.some(d=>isFut(c,r,d[0])||isPend(c,r,d[0]))) return "wait";
   const m=ds.filter(d=>req.miss.includes(d[0]));
   return m.length?"blk":"ready";
 }
@@ -1015,8 +1070,9 @@ function actions(c){
     const q=c["r"+r],Rp=P["r"+r];
     if(!q.sent){ if(TODAY>=Rp.avail){const late=(TODAY-Rp.avail)/DAY>=ALLARME_INVIO_GG;out.push({key:"invio",txt:`Inviare richiesta ${r}`,cls:late?"crit":"warn",r});} return;}
     if(!q.chk){ out.push(days(q.sent)>=SOLLECITO_GG&&!q.sol?{key:"check",txt:`Controllare documenti R${r}`,cls:"crit",r}:{key:"check",txt:`Controllare documenti R${r}`,cls:"warn",r}); return;}
-    const mi=missOf(c,r).length;
-    if(mi){ if(!q.sol&&days(q.sent)>=SOLLECITO_GG) out.push({key:"sol",txt:`Sollecitare documenti R${r}`,cls:"crit",r});
+    const mi=missOf(c,r).length,pe=pendOf(c,r);
+    if(pe.length) out.push({key:"rich",txt:pe.length===1?`Richiedere ${pe[0][1]} R${r}`:`Richiedere ${pe.length} documenti scaduti R${r}`,cls:"warn",r});
+    if(mi){ if(!q.sol&&days(solBase(c,r))>=SOLLECITO_GG) out.push({key:"sol",txt:`Sollecitare documenti R${r}`,cls:"crit",r});
       else out.push({key:"",txt:mi===1?`Manca 1 documento R${r}`:`Mancano ${mi} documenti R${r}`,cls:"neu",r});}
     if(ALL.some(cc=>vState(c,r,cc)==="ready")) out.push({key:"verif",txt:`Verifiche R${r} da fare`,cls:"warn",r});
   });
@@ -1030,7 +1086,7 @@ function main(c){
   if(ALL.every(cc=>["done","na"].includes(vState(c,1,cc))&&["done","na"].includes(vState(c,2,cc)))&&c.r2.sent) return {txt:"Completati",cls:"ok"};
   return {txt:"In attesa",cls:"neu"};
 }
-const GROUPS=[["invio","Inviare richiesta"],["check","Controllare documenti ricevuti"],["sol","Sollecitare documenti"],["verif","Verifiche da fare"]];
+const GROUPS=[["invio","Inviare richiesta"],["check","Controllare documenti ricevuti"],["rich","Richiedere documenti scaduti"],["sol","Sollecitare documenti"],["verif","Verifiche da fare"]];
 const ui={q:"",na:false,group:"",coll:""};
 const $=id=>root.querySelector('#'+CSS.escape(id));
 $("fColl").innerHTML=`<option value="">Tutti gli incaricati</option>`+PERSONE.map(p=>`<option>${p}</option>`).join("");
@@ -1082,7 +1138,7 @@ $("rows").onkeydown=e=>{if(e.key==="Enter"){const tr=e.target.closest("tr[data-i
 let openId=null,tab="1",mailOpen=null;
 function mailText(c,r,soll){
   const P=periods(c),Rp=P["r"+r],q=c["r"+r];
-  const ds=catalog(c,r).filter(d=>!soll||q.miss.includes(d[0]));
+  const mo=missOf(c,r),ds=catalog(c,r).filter(d=>soll?mo.includes(d[0]):!isFut(c,r,d[0]));
   const per=`dal ${dd(Rp.from)} al ${dd(Rp.to)}`;
   return `A: ${c.contatto||"(contatto mancante in anagrafica)"}\nOggetto: ${c.nome} - ${soll?"sollecito ":""}documenti per le verifiche periodiche ${per}\n\nBuongiorno,\n\n${soll?"non abbiamo ancora ricevuto i seguenti documenti, necessari per completare le verifiche periodiche relative al periodo "+per+":":"per lo svolgimento delle verifiche periodiche relative al periodo "+per+", vi chiediamo di inviarci i seguenti documenti:"}\n\n${ds.map(d=>{const n=soll&&q.nm[d[0]];return `- ${d[1]}${n?": "+n:d[3]?": "+d[3]:""}`;}).join("\n")}\n\nGrazie e cordiali saluti`;
 }
@@ -1098,8 +1154,10 @@ function reqBlock(c,r){
       ${c.canale==="mail"?`<button type="button" class="btn ghost" data-mail="${r}:0">Mail richiesta</button>${mi?`<button type="button" class="btn ghost" data-mail="${r}:1">Mail sollecito</button>`:""}`:""}
     </div>
     ${mailOpen&&mailOpen.startsWith(r+":")?`<div class="mailbox"><textarea id="mailtxt" readonly>${esc(mailText(c,r,mailOpen.endsWith(":1")))}</textarea><div class="row2"><button type="button" class="btn" data-out="1">Apri in Outlook</button><button type="button" class="btn ghost" data-copy="1">Copia testo</button><span class="na" id="copied"></span></div></div>`:""}
-    <div class="docs">${ds.map(d=>{const m=q.miss.includes(d[0]);return `<div class="doc ${m?"m":""}"><div><div class="t">${esc(d[1])}${d[2]?`<span class="cc">${d[2]}</span>`:""}</div><div class="n">${esc(d[3])}</div></div>
-      ${q.sent?`<button type="button" class="mbtn" data-miss="${r}:${d[0]}" aria-pressed="${m}">${m?"Manca":"manca?"}</button>`:""}
+    <div class="docs">${ds.map(d=>{const fu=isFut(c,r,d[0]),pe=!fu&&q.sent&&isPend(c,r,d[0]),m=!fu&&!pe&&q.miss.includes(d[0]),du=dueOf(c,r,d[0]);
+      return `<div class="doc ${m?"m":""}${fu?" fut":""}"><div><div class="t">${esc(d[1])}${d[2]?`<span class="cc">${d[2]}</span>`:""}</div><div class="n">${esc(d[3])}${du?` · scadenza ${dd(du).slice(0,5)}`:""}</div></div>
+      ${fu?`<span class="futp">da chiedere dal ${dd(new Date(du.getTime()+DAY)).slice(0,5)}</span>`:pe?`<span class="pend"><span class="pill warn">da richiedere</span><button type="button" class="mbtn" data-dopo="${r}:${d[0]}:ok">Ricevuto</button><button type="button" class="mbtn" data-dopo="${r}:${d[0]}:m">Manca</button></span>`
+        :q.sent?`<button type="button" class="mbtn" data-miss="${r}:${d[0]}" aria-pressed="${m}">${m?"Manca":"manca?"}</button>`:""}
       ${m?`<input class="mnote" id="nm${r}_${d[0]}" data-nm="${r}:${d[0]}" value="${esc(q.nm[d[0]]||"")}" placeholder="Cosa manca" aria-label="Cosa manca · ${esc(d[1])}">`:""}</div>`;}).join("")}</div>
   </fieldset>`;
 }
@@ -1143,6 +1201,8 @@ $("dBody").addEventListener("change",ev=>{const t=ev.target,c=cur();if(!c)return
 $("dBody").addEventListener("click",ev=>{const c=cur();if(!c)return;const b=ev.target.closest("button");if(!b)return;
   if(b.dataset.tab){tab=b.dataset.tab;mailOpen=null;refresh();return;}
   if(b.dataset.ok){const q=c["r"+b.dataset.ok];q.chk=iso(TODAY);q.miss=[];q.nm={};refresh();return;}
+  if(b.dataset.dopo){const [r,k,v]=b.dataset.dopo.split(":");const q=c["r"+r];q.dopo=Object.assign({},q.dopo||{},{[k]:v==="ok"?"ok":ISO()});
+    q.miss=q.miss.filter(x=>x!==k);if(v!=="ok")q.miss.push(k);else delete q.nm[k];refresh();return;}
   if(b.dataset.miss){const [r,k]=b.dataset.miss.split(":");const q=c["r"+r];q.chk=q.chk||iso(TODAY);
     if(q.miss.includes(k)){q.miss=q.miss.filter(x=>x!==k);delete q.nm[k];refresh();}
     else{q.miss.push(k);refresh();const n=$(`nm${r}_${k}`);if(n)n.focus();}return;}
@@ -1163,12 +1223,15 @@ APP.sec.controlli.agenda=()=>{const T=[],plus=(s,n)=>new Date(pd(s).getTime()+n*
   act.forEach(c=>{if(okR(c,1)&&okR(c,2))done++;const P=periods(c);
     const add=o=>T.push(Object.assign({id:c.id,sigla:c.sigla,nome:c.nome,who:""},o));
     actions(c).forEach(x=>{if(!x.key)return;const q=c["r"+x.r];
-      add({txt:{invio:"Inviare richiesta",check:"Controllare documenti",sol:"Sollecitare documenti",verif:"Verifiche da fare"}[x.key]+" "+PL[x.r],cls:x.cls,
-        sym:{invio:"d",check:"s",sol:"r",verif:"s"}[x.key],who:["check","verif"].includes(x.key)?c.coll:"",
-        d:{invio:P["r"+x.r].avail,check:q.sent&&(x.cls==="crit"?plus(q.sent,SOLLECITO_GG):pd(q.sent)),sol:q.sent&&plus(q.sent,SOLLECITO_GG),verif:q.chk&&pd(q.chk)}[x.key]||null});});
+      const pe=x.key==="rich"?pendOf(c,x.r):[];
+      add({txt:x.key==="rich"?(pe.length===1?`Richiedere ${pe[0][1]}`:`Richiedere ${pe.length} documenti scaduti`):{invio:"Inviare richiesta",check:"Controllare documenti",sol:"Sollecitare documenti",verif:"Verifiche da fare"}[x.key]+" "+PL[x.r],cls:x.cls,
+        sym:{invio:"d",check:"s",rich:"d",sol:"r",verif:"s"}[x.key],who:["check","verif"].includes(x.key)?c.coll:"",
+        d:{invio:P["r"+x.r].avail,check:q.sent&&(x.cls==="crit"?plus(q.sent,SOLLECITO_GG):pd(q.sent)),rich:pe.length&&new Date(Math.min(...pe.map(d=>dueOf(c,x.r,d[0]).getTime()))+DAY),sol:q.sent&&plus(solBase(c,x.r),SOLLECITO_GG),verif:q.chk&&pd(q.chk)}[x.key]||null});});
     [1,2].forEach(r=>{const q=c["r"+r];
       if(!q.sent&&TODAY<P["r"+r].avail)add({txt:"Inviare richiesta "+PL[r],d:P["r"+r].avail,sym:"d",fut:1});
-      else if(q.sent&&q.chk&&missOf(c,r).length&&!q.sol&&days(q.sent)<SOLLECITO_GG)add({txt:"Sollecitare documenti "+PL[r],d:plus(q.sent,SOLLECITO_GG),sym:"r",fut:1});});});
+      else if(q.sent&&q.chk&&missOf(c,r).length&&!q.sol&&days(solBase(c,r))<SOLLECITO_GG)add({txt:"Sollecitare documenti "+PL[r],d:plus(solBase(c,r),SOLLECITO_GG),sym:"r",fut:1});
+      // documenti non ancora scaduti: da richiedere il giorno dopo la scadenza
+      if(q.sent&&q.chk)catalog(c,r).filter(d=>isFut(c,r,d[0])).forEach(d=>add({txt:`Richiedere ${d[1]}`,d:new Date(dueOf(c,r,d[0]).getTime()+DAY),sym:"d",fut:1}));});});
   return {T,prog:[done,act.length]};};
 APP.sec.controlli.parts=()=>{const a=clients.filter(c=>c.attiva);
   const ok=(c,r)=>{const q=c["r"+r];return !!(q.sent&&q.chk&&!missOf(c,r).length&&ALL.every(cc=>["done","na"].includes(vState(c,r,cc))));};
@@ -1265,15 +1328,16 @@ const X=seasonYear(TODAY);
 const endOfMonth=(y,m)=>new Date(y,m+1,0);
 
 const MOD={"770":[["dip","770 dipendenti"],["aut","770 autonomi"],["cap","770 capitali"]],"ri":[["red","Redditi SC"],["irap","IRAP"]]};
-// scadenze nella stagione: 770 sempre 31/10 dell'anno X; Redditi e IRAP ultimo giorno del decimo mese dopo la chiusura
+// scadenze nella stagione: 770 31/10 dell'anno X; Redditi e IRAP ultimo giorno del decimo mese dopo la chiusura; slittamenti e proroghe da SCAD
 function blocchi(c){
   const s770=new Date(X,9,31);
   // esercizio la cui scadenza Redditi cade nella stagione (settembre X - agosto X+1)
   let cy=X; let ch=endOfMonth(cy,c.mese-1); let sri=endOfMonth(ch.getFullYear(),ch.getMonth()+10);
   if(sri<new Date(X,8,1)){cy++;ch=endOfMonth(cy,c.mese-1);sri=endOfMonth(ch.getFullYear(),ch.getMonth()+10);}
   if(sri>new Date(X+1,7,31)){cy--;ch=endOfMonth(cy,c.mese-1);sri=endOfMonth(ch.getFullYear(),ch.getMonth()+10);}
-  return {"770":{nome:`770/${X}`,anno:X-1,scad:s770,label:`Modello 770/${X} · anno ${X-1}`},
-          "ri":{nome:`Redditi/IRAP ${ch.getFullYear()+1}`,scad:sri,label:`Redditi/IRAP · esercizio al ${dd(ch)}`}};
+  const kri=+c.mese===12?`ri_${ch.getFullYear()+1}`:`ri_m${+c.mese}_${ch.getFullYear()}`;
+  return {"770":{nome:`770/${X}`,anno:X-1,scad:SCAD.due(`770_${X}`)||s770,label:`Modello 770/${X} · anno ${X-1}`},
+          "ri":{nome:`Redditi/IRAP ${ch.getFullYear()+1}`,scad:SCAD.due(kri)||sri,label:`Redditi/IRAP · esercizio al ${dd(ch)}`}};
 }
 const FLT=a=>true,TUP=a=>[a.sigla,a.nome,a.tipo];
 const CL=APP.ana.filter(a=>a.sigla&&a.attivo!==false&&FLT(a)).map(TUP);
@@ -2945,6 +3009,35 @@ APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(i
 #sec-cruscotto .job .f small{color:var(--muted)}
 #sec-cruscotto .job .a{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);white-space:nowrap}
 #sec-cruscotto .none{font-size:12.5px;color:var(--muted)}
+/* riquadri di destra allineati ai primi elenchi di sinistra (sotto il titolo del gruppo) */
+@media (min-width:861px){#sec-cruscotto .side{padding-top:25px}}
+/* scadenze fiscali */
+#sec-cruscotto .sct{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto}
+#sec-cruscotto .sct .r{display:contents}
+#sec-cruscotto .sct .r>span{padding:8px 16px 8px 0;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center}
+#sec-cruscotto .sct .r>span:first-child{padding-left:14px}
+#sec-cruscotto .sct .r>span:last-child{padding-right:14px;align-items:flex-end;text-align:right}
+#sec-cruscotto .sct .r:last-child>span{border-bottom:0}
+#sec-cruscotto .sct .m{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+#sec-cruscotto .sct .dt{font-family:var(--f-mono);font-size:13px}
+#sec-cruscotto .sct .dt s{color:var(--muted);font-size:11px}
+#sec-cruscotto .sct .nm{font-size:13.5px;font-weight:600}
+#sec-cruscotto .sct .rf{font-size:12.5px;color:var(--muted)}
+#sec-cruscotto .sct .w{font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap}
+#sec-cruscotto .sct .r.past>span{color:var(--muted)}#sec-cruscotto .sct .r.past .nm{font-weight:400}#sec-cruscotto .sct .r.past .w{color:var(--ok)}
+#sec-cruscotto .sct .r.next>span{background:var(--accent-soft)}#sec-cruscotto .sct .r.next .w{color:var(--accent);font-weight:600}
+#sec-cruscotto .sct .r.soon .w{color:var(--warn);font-weight:600}
+#sec-cruscotto .chipx{font-size:10px;letter-spacing:.04em;text-transform:uppercase;border-radius:4px;padding:0 5px;background:var(--warn-soft);color:var(--warn);margin-left:6px;vertical-align:1px}
+#sec-cruscotto .linkb{border:0;background:none;color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0;text-transform:none;letter-spacing:0}
+#sec-cruscotto .exfs{grid-template-columns:1fr}
+#sec-cruscotto .exr{display:grid;grid-template-columns:minmax(0,1fr) auto 34px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+#sec-cruscotto .exr small{display:block;color:var(--muted);font-size:12px}
+#sec-cruscotto .exr .dd{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
+#sec-cruscotto .exr .dd s{color:var(--muted);margin-right:6px}
+#sec-cruscotto .exf2{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px}
+#sec-cruscotto .x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;border-radius:6px;height:30px}
+#sec-cruscotto .x:hover{background:var(--crit-soft);color:var(--crit)}
+@media (max-width:620px){#sec-cruscotto .sct{grid-template-columns:auto minmax(0,1fr) auto}#sec-cruscotto .sct .r>span.mcol{display:none}#sec-cruscotto .exf2{grid-template-columns:1fr}}
 @media (max-width:860px){#sec-cruscotto .agenda{grid-template-columns:1fr}}
 @media (max-width:520px){#sec-cruscotto .item{grid-template-columns:4px 58px 14px minmax(0,1fr);gap:8px}#sec-cruscotto .item .r{grid-column:4}}
 </style>
@@ -2959,6 +3052,13 @@ APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(i
       <div class="box"><h4>Collaboratori</h4><div id="cWho"></div></div>
     </aside>
   </div>
+</div>
+<div id="exBox" hidden>
+  <div class="scrim" id="exScrim"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="exTitle">
+    <div class="dhead"><div><h2 id="exTitle">Proroghe</h2></div><button class="close" id="exClose" aria-label="Chiudi">×</button></div>
+    <div class="dbody" id="exBody"></div>
+  </aside>
 </div>
 </section>
 <script>(function(root){
@@ -3012,6 +3112,7 @@ function render(){
   let h=grp("crit","Subito",sub)+grp("warn","Da fare",dafare);
   if(wk.length)h+=grp("","Questa settimana",wk,`<em>fino al ${dm(fine)}</em>`);
   else{h+=`<div class="empty">Nessuna scadenza fino al ${dm(fine)}.</div>`;h+=grp("","Prossime scadenze",oltre.slice(0,PROSSIME));}
+  h+=fiscali();
   root.querySelector("#cList").innerHTML=h;
 
   root.querySelector("#cProg").innerHTML=SECS.filter(([s])=>P[s]).map(([s,l])=>{const [d,tot]=P[s],cr=T.filter(t=>t.s===s&&!t.fut&&t.cls==="crit").length;
@@ -3025,17 +3126,52 @@ function render(){
 }
 
 root.addEventListener("click",e=>{
+  if(e.target.closest("#exOpen")){exRender();root.querySelector("#exBox").hidden=false;return;}
   const f=e.target.closest("[data-f]");
   if(f){sec=f.classList.contains("prow")&&sec===f.dataset.f?"":f.dataset.f;try{localStorage.setItem("revisione_crus_sec",sec);}catch(x){}render();return;}
   const g=e.target.closest(".go");if(g)APP.goto(g.dataset.s,g.dataset.id);
 });
 
+
+// ---- scadenze fiscali della stagione, sotto l'elenco delle azioni ----
+const X0=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
+const d8=d=>{const s=SCAD.dd(d);return s.slice(0,6)+s.slice(8);};
+const MESIC=["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+function fiscali(){
+  const L=SCAD.stagione(X0,APP.ana);const nx=L.find(s=>s.d>=t0),nxt=nx?+nx.d:null;let mk="";
+  const rows=L.map(s=>{const m=MESIC[s.d.getMonth()]+" "+String(s.d.getFullYear()).slice(2),sm=m!==mk;mk=m;const n=gg(s.d),past=n<0;
+    return `<div class="r ${past?"past":+s.d===nxt?"next":n<=30?"soon":""}"><span class="mcol"><span class="m">${sm?m:""}</span></span>
+      <span><span class="dt">${d8(s.d)}${s.pro?` <s>${d8(s.ord)}</s>`:""}</span></span>
+      <span><span class="nm">${esc(s.nome)}${s.pro?`<span class="chipx">prorogata</span>`:""}</span><span class="rf">${esc(s.sub)}${s.pro&&s.nota?" · "+esc(s.nota):""}${!s.pro&&+s.ord!==+s.raw?` · slitta dal ${d8(s.raw).slice(0,5)}`:""}</span></span>
+      <span><span class="w">${past?"✓ scaduta":n===0?"oggi":`tra ${n} gg`}</span></span></div>`;}).join("");
+  const np=SCAD.proroghe().length;
+  return `<div class="grp"><h3 style="justify-content:space-between"><span>Scadenze fiscali <em>stagione ${X0}/${String(X0+1).slice(2)}</em></span><button type="button" class="linkb" id="exOpen">${np?`Proroghe (${np})`:"Proroghe"}</button></h3><div class="items sct">${rows}</div></div>`;}
+// ---- pannello proroghe ----
+function exRender(){const L=SCAD.stagione(X0,APP.ana),P=SCAD.proroghe();
+  root.querySelector("#exBody").innerHTML=`<span class="na">Le scadenze si calcolano da sole ogni anno e slittano al primo giorno lavorativo. Qui inserisci solo le proroghe: la nuova data vale in tutto il gestionale (cruscotto, Dichiarativi, Controlli contabili).</span>
+  <fieldset class="exfs"><legend>Proroghe inserite</legend>${P.length?P.map(s=>`<div class="exr"><span class="t"><b>${esc(s.nome)}</b> <span class="na">${esc(s.sub)}</span>${s.nota?`<small>${esc(s.nota)}</small>`:""}</span>
+      <span class="dd"><s>${SCAD.dd(s.ord)}</s>${SCAD.dd(s.d)}</span><button type="button" class="x" data-exdel="${s.k}" aria-label="Elimina proroga">×</button></div>`).join(""):`<span class="na">Nessuna proroga.</span>`}</fieldset>
+  <fieldset class="exfs"><legend>Nuova proroga</legend>
+    <label class="f"><span>Adempimento</span><select id="exK">${L.filter(s=>!s.pro).map(s=>`<option value="${s.k}">${esc(s.nome)} · ${esc(s.sub)}</option>`).join("")}</select></label>
+    <span class="na" id="exOrd"></span>
+    <div class="exf2"><label class="f"><span>Nuova scadenza</span><input type="date" id="exD"></label><label class="f"><span>Nota (facoltativa)</span><input id="exN" placeholder="es. DPCM del …"></label></div>
+    <button type="button" class="btn" id="exAdd" style="align-self:flex-start">Aggiungi proroga</button></fieldset>`;
+  exOrd();}
+function exOrd(){const k=(root.querySelector("#exK")||{}).value,i=k&&SCAD.info(k);root.querySelector("#exOrd").textContent=i?`Scadenza ordinaria: ${SCAD.dd(i.ord)}`:"";}
+const exClose=()=>{root.querySelector("#exBox").hidden=true;};
+root.querySelector("#exClose").onclick=exClose;root.querySelector("#exScrim").onclick=exClose;
+root.querySelector("#exBody").addEventListener("change",e=>{if(e.target.id==="exK")exOrd();});
+root.querySelector("#exBody").addEventListener("click",e=>{const d=e.target.closest("[data-exdel]");
+  if(d){SCAD.proroga(d.dataset.exdel,"","");exRender();render();return;}
+  if(e.target.id==="exAdd"){const k=root.querySelector("#exK").value,v=root.querySelector("#exD").value;if(!k)return;
+    if(!v||+v.slice(0,4)<1900){root.querySelector("#exOrd").textContent="Scegli la nuova data";return;}
+    SCAD.proroga(k,v,root.querySelector("#exN").value.trim());exRender();render();}});
 APP.sec.cruscotto={render:()=>render()};
 })(document.getElementById('sec-cruscotto'));</script>
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="22/10/2026 21:20";
+const VERSIONE="22/10/2026 22:30";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
