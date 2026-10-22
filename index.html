@@ -980,6 +980,8 @@ function catalog(c,r){
   return L.filter(d=>!c.escl.includes(d[0].replace(/_\d+$/,"").replace(/^lipe\d$/,"lipe")));
 }
 const docsFor=(c,r,cc)=>catalog(c,r).filter(d=>d[2]&&d[2].split("·").includes(cc));
+// mancanti che fanno parte dell'elenco attuale (codici rimasti da periodi o documenti tolti non contano)
+const missOf=(c,r)=>{const ids=new Set(catalog(c,r).map(d=>d[0]));return c["r"+r].miss.filter(k=>ids.has(k));};
 
 const FLT=a=>true,TUP=a=>[a.sigla,a.nome,a.tipo];
 const CL=APP.ana.filter(a=>a.sigla&&a.attivo!==false&&FLT(a)).map(TUP);
@@ -1010,8 +1012,9 @@ function actions(c){
     const q=c["r"+r],Rp=P["r"+r];
     if(!q.sent){ if(TODAY>=Rp.avail){const late=(TODAY-Rp.avail)/DAY>=ALLARME_INVIO_GG;out.push({key:"invio",txt:`Inviare richiesta ${r}`,cls:late?"crit":"warn",r});} return;}
     if(!q.chk){ out.push(days(q.sent)>=SOLLECITO_GG&&!q.sol?{key:"check",txt:`Controllare documenti R${r}`,cls:"crit",r}:{key:"check",txt:`Controllare documenti R${r}`,cls:"warn",r}); return;}
-    if(q.miss.length){ if(!q.sol&&days(q.sent)>=SOLLECITO_GG) out.push({key:"sol",txt:`Sollecitare documenti R${r}`,cls:"crit",r});
-      else out.push({key:"",txt:q.miss.length===1?`Manca 1 documento R${r}`:`Mancano ${q.miss.length} documenti R${r}`,cls:"neu",r});}
+    const mi=missOf(c,r).length;
+    if(mi){ if(!q.sol&&days(q.sent)>=SOLLECITO_GG) out.push({key:"sol",txt:`Sollecitare documenti R${r}`,cls:"crit",r});
+      else out.push({key:"",txt:mi===1?`Manca 1 documento R${r}`:`Mancano ${mi} documenti R${r}`,cls:"neu",r});}
     if(ALL.some(cc=>vState(c,r,cc)==="ready")) out.push({key:"verif",txt:`Verifiche R${r} da fare`,cls:"warn",r});
   });
   return out;
@@ -1032,7 +1035,8 @@ $("fColl").innerHTML=`<option value="">Tutti gli incaricati</option>`+PERSONE.ma
 function reqCell(c,r){
   const q=c["r"+r];
   if(!q.sent) return `<span class="req"><span class="mk sq"></span><span class="mk ci"></span><span class="na">da inviare</span></span>`;
-  const docs=!q.chk?`<span class="mk ci"></span>`:q.miss.length?`<span class="mk ci miss"></span><span class="miss-n">${q.miss.length}</span>`:`<span class="mk ci on"></span>`;
+  const mi=missOf(c,r).length;
+  const docs=!q.chk?`<span class="mk ci"></span>`:mi?`<span class="mk ci miss"></span><span class="miss-n">${mi}</span>`:`<span class="mk ci on"></span>`;
   return `<span class="req" title="Inviata ${fmt(q.sent)}"><span class="mk sq on"></span>${docs}${q.sol?`<span class="sol-n" title="Sollecitato">S</span>`:""}</span>`;
 }
 function verCell(c){
@@ -1054,7 +1058,7 @@ function _render(){
   const act=clients.filter(c=>c.attiva);
   const vDone=act.reduce((s,c)=>s+ALL.filter(cc=>["done","na"].includes(vState(c,1,cc))&&["done","na"].includes(vState(c,2,cc))).length,0);
   $("stats").innerHTML=[["Richieste 1 inviate",act.filter(c=>c.r1.sent).length+"/"+act.length],["Richieste 2 inviate",act.filter(c=>c.r2.sent).length+"/"+act.length],
-    ["Clienti con documenti mancanti",act.filter(c=>c.r1.miss.length||c.r2.miss.length).length],["Verifiche completate",vDone+"/"+act.length*7]]
+    ["Clienti con documenti mancanti",act.filter(c=>missOf(c,1).length||missOf(c,2).length).length],["Verifiche completate",vDone+"/"+act.length*7]]
     .map(([l,n])=>`<div class="stat"><span class="n">${n}</span><span class="l">${l}</span></div>`).join("");
   const list=all.filter(({c,acts})=>{if(!c.attiva&&!ui.na)return false;if(ui.group&&!acts.some(a=>a.key===ui.group))return false;
     if(ui.coll&&c.coll!==ui.coll)return false;if(ui.q&&!(`${c.nome} ${c.sigla}`.toLowerCase().includes(ui.q)))return false;return true;});
@@ -1080,15 +1084,15 @@ function mailText(c,r,soll){
   return `A: ${c.contatto||"(contatto mancante in anagrafica)"}\nOggetto: ${c.nome} - ${soll?"sollecito ":""}documenti per le verifiche periodiche ${per}\n\nBuongiorno,\n\n${soll?"non abbiamo ancora ricevuto i seguenti documenti, necessari per completare le verifiche periodiche relative al periodo "+per+":":"per lo svolgimento delle verifiche periodiche relative al periodo "+per+", vi chiediamo di inviarci i seguenti documenti:"}\n\n${ds.map(d=>{const n=soll&&q.nm[d[0]];return `- ${d[1]}${n?": "+n:d[3]?": "+d[3]:""}`;}).join("\n")}\n\nGrazie e cordiali saluti`;
 }
 function reqBlock(c,r){
-  const P=periods(c),Rp=P["r"+r],q=c["r"+r],ds=catalog(c,r);
+  const P=periods(c),Rp=P["r"+r],q=c["r"+r],ds=catalog(c,r),mi=missOf(c,r).length;
   return `<fieldset><legend>Richiesta ${r} · ${r===1?"I–III trimestre":"IV trimestre"}</legend>
     <div class="ro"><span>Periodo</span><b>${dd(Rp.from)} – ${dd(Rp.to)}</b></div>
     <label class="f"><span>Data invio richiesta</span><input type="date" id="sent${r}" data-q="${r}" data-f="sent" value="${q.sent||""}"></label>
     <div class="f" style="justify-content:flex-end"><label class="chk"><input type="checkbox" id="sol${r}" data-q="${r}" data-f="sol" ${q.sol?"checked":""} ${q.sent?"":"disabled"}> Sollecito inviato</label></div>
     <div class="row2">
-      ${q.sent?(q.chk?`<span class="pill ${q.miss.length?"crit":"ok"}">${q.miss.length?q.miss.length+" mancanti":"Documenti completi"}</span>`
+      ${q.sent?(q.chk?`<span class="pill ${mi?"crit":"ok"}">${mi?mi+" mancanti":"Documenti completi"}</span>`
         :`<button type="button" class="btn" data-ok="${r}">Documenti completi</button><span class="na">oppure tocca "manca" sui documenti non arrivati</span>`):""}
-      ${c.canale==="mail"?`<button type="button" class="btn ghost" data-mail="${r}:0">Mail richiesta</button>${q.miss.length?`<button type="button" class="btn ghost" data-mail="${r}:1">Mail sollecito</button>`:""}`:""}
+      ${c.canale==="mail"?`<button type="button" class="btn ghost" data-mail="${r}:0">Mail richiesta</button>${mi?`<button type="button" class="btn ghost" data-mail="${r}:1">Mail sollecito</button>`:""}`:""}
     </div>
     ${mailOpen&&mailOpen.startsWith(r+":")?`<div class="mailbox"><textarea id="mailtxt" readonly>${esc(mailText(c,r,mailOpen.endsWith(":1")))}</textarea><div class="row2"><button type="button" class="btn" data-out="1">Apri in Outlook</button><button type="button" class="btn ghost" data-copy="1">Copia testo</button><span class="na" id="copied"></span></div></div>`:""}
     <div class="docs">${ds.map(d=>{const m=q.miss.includes(d[0]);return `<div class="doc ${m?"m":""}"><div><div class="t">${esc(d[1])}${d[2]?`<span class="cc">${d[2]}</span>`:""}</div><div class="n">${esc(d[3])}</div></div>
@@ -1152,7 +1156,7 @@ render();
 APP.sec['controlli']={render:()=>render()};
 APP.sec.controlli.agenda=()=>{const T=[],plus=(s,n)=>new Date(pd(s).getTime()+n*DAY);
   const act=clients.filter(c=>c.attiva),PL={1:"I–III trim.",2:"IV trim."};let done=0;
-  const okR=(c,r)=>{const q=c["r"+r];return !!(q.sent&&q.chk&&!q.miss.length&&ALL.every(cc=>["done","na"].includes(vState(c,r,cc))));};
+  const okR=(c,r)=>{const q=c["r"+r];return !!(q.sent&&q.chk&&!missOf(c,r).length&&ALL.every(cc=>["done","na"].includes(vState(c,r,cc))));};
   act.forEach(c=>{if(okR(c,1)&&okR(c,2))done++;const P=periods(c);
     const add=o=>T.push(Object.assign({id:c.id,sigla:c.sigla,nome:c.nome,who:""},o));
     actions(c).forEach(x=>{if(!x.key)return;const q=c["r"+x.r];
@@ -1161,10 +1165,10 @@ APP.sec.controlli.agenda=()=>{const T=[],plus=(s,n)=>new Date(pd(s).getTime()+n*
         d:{invio:P["r"+x.r].avail,check:q.sent&&(x.cls==="crit"?plus(q.sent,SOLLECITO_GG):pd(q.sent)),sol:q.sent&&plus(q.sent,SOLLECITO_GG),verif:q.chk&&pd(q.chk)}[x.key]||null});});
     [1,2].forEach(r=>{const q=c["r"+r];
       if(!q.sent&&TODAY<P["r"+r].avail)add({txt:"Inviare richiesta "+PL[r],d:P["r"+r].avail,sym:"d",fut:1});
-      else if(q.sent&&q.chk&&q.miss.length&&!q.sol&&days(q.sent)<SOLLECITO_GG)add({txt:"Sollecitare documenti "+PL[r],d:plus(q.sent,SOLLECITO_GG),sym:"r",fut:1});});});
+      else if(q.sent&&q.chk&&missOf(c,r).length&&!q.sol&&days(q.sent)<SOLLECITO_GG)add({txt:"Sollecitare documenti "+PL[r],d:plus(q.sent,SOLLECITO_GG),sym:"r",fut:1});});});
   return {T,prog:[done,act.length]};};
 APP.sec.controlli.parts=()=>{const a=clients.filter(c=>c.attiva);
-  const ok=(c,r)=>{const q=c["r"+r];return !!(q.sent&&q.chk&&!q.miss.length&&ALL.every(cc=>["done","na"].includes(vState(c,r,cc))));};
+  const ok=(c,r)=>{const q=c["r"+r];return !!(q.sent&&q.chk&&!missOf(c,r).length&&ALL.every(cc=>["done","na"].includes(vState(c,r,cc))));};
   return [["Richiesta 1",a.filter(c=>ok(c,1)).length,a.length],["Richiesta 2",a.filter(c=>ok(c,2)).length,a.length]];};
 })(document.getElementById('sec-controlli'));</script>
 
