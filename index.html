@@ -122,6 +122,7 @@ legend{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:
 
 .tabs a[aria-current]{color:var(--fg);font-weight:600;border-color:var(--accent)}
 .tabs a.alt{margin:5px 0 5px auto;padding:4px 14px;border:1px solid var(--accent);border-radius:999px;color:var(--accent);background:var(--accent-soft);font-weight:600;align-self:center}
+.tabs a.alt + a.alt{margin-left:6px}
 .tabs a.alt[aria-current]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .tabs a.alt:not([aria-current]):hover{background:var(--surface)}
 .meta{flex-wrap:wrap;justify-content:flex-end}
@@ -157,7 +158,7 @@ const SY=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
 APP.SY=SY;
 let D=null;try{D=JSON.parse(localStorage.getItem(KEY)||"null");}catch(e){}
 if(!D||typeof D!=="object")D={};
-D.v=1;D.ana=D.ana||{};D.s=D.s||{};D.lead=D.lead||{};
+D.v=1;D.ana=D.ana||{};D.s=D.s||{};D.lead=D.lead||{};D.ore=D.ore||{};D.oreX=D.oreX||{};
 APP.data=D;
 APP.empty=()=>!Object.keys(D.ana).length;
 const clone=v=>v===undefined?undefined:JSON.parse(JSON.stringify(v));
@@ -205,6 +206,7 @@ function mergeMap(L,R){let ca=false,cb=false;
   for(const k in L)if(!R[k])cb=true;return [ca,cb];}
 function merge(L,R){let ca=false,cb=false;const acc=([a,b])=>{ca=ca||a;cb=cb||b;};
   R=R||{};acc(mergeMap(L.ana,R.ana||{}));acc(mergeMap(L.lead,R.lead||{}));
+  acc(mergeMap(L.ore||(L.ore={}),R.ore||{}));acc(mergeMap(L.oreX||(L.oreX={}),R.oreX||{}));
   const ys=new Set([...Object.keys(L.s),...Object.keys(R.s||{})]);
   ys.forEach(y=>{const ly=L.s[y]||(L.s[y]={}),ry=(R.s||{})[y]||{};
     new Set([...Object.keys(ly),...Object.keys(ry)]).forEach(n=>{acc(mergeMap(ly[n]||(ly[n]={}),ry[n]||{}));});});
@@ -315,7 +317,7 @@ function OUTLOOK(t){const L=t.split("\n");const to=(L[0]||"").replace(/^A:\s*/,"
         </div><input type="file" id="gImp" accept=".json,application/json" hidden></div></div>
   </div>
   <nav class="tabs" aria-label="Sezioni" id="gNav">
-    <a data-s="cruscotto">Cruscotto</a><a data-s="anagrafica">Anagrafica</a><a data-s="dichiarativi">Dichiarativi</a><a data-s="inventari">Inventari</a><a data-s="controlli">Controlli contabili</a><a data-s="circolarizzazioni">Circolarizzazioni</a><a data-s="general">General</a><a data-s="audit">Audit</a><a data-s="bilanci" class="alt">Bilanci</a>
+    <a data-s="cruscotto">Cruscotto</a><a data-s="anagrafica">Anagrafica</a><a data-s="dichiarativi">Dichiarativi</a><a data-s="inventari">Inventari</a><a data-s="controlli">Controlli contabili</a><a data-s="circolarizzazioni">Circolarizzazioni</a><a data-s="general">General</a><a data-s="audit">Audit</a><a data-s="ore" class="alt">Ore</a><a data-s="bilanci" class="alt">Bilanci</a>
   </nav>
 </header>
 <section id="sec-start" class="sec" hidden><div class="wrap"><div class="start">
@@ -2347,6 +2349,318 @@ render();
 APP.sec['bilanci']={render:()=>render()};
 
 })(document.getElementById('sec-bilanci'));</script>
+<style>
+/* Ore: inserimento della giornata a sinistra; mese, ore clienti dell'anno e report a destra */
+#sec-ore .top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+#sec-ore .daynav{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#sec-ore .nb{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;min-width:34px;height:34px;font:inherit;font-size:16px;cursor:pointer;padding:0 10px}
+#sec-ore .nb.txt{font-size:13px;font-weight:600}
+#sec-ore .ogrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+#sec-ore .main,#sec-ore .side{display:flex;flex-direction:column;gap:14px;min-width:0}
+#sec-ore .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+#sec-ore .box{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+#sec-ore .box h4{margin:0 0 2px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:8px}
+#sec-ore .dayhead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+#sec-ore .dt{font-family:var(--f-disp);font-size:26px;line-height:1.1}
+#sec-ore .dt small{display:block;font-family:var(--f-body);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+#sec-ore .count{display:flex;align-items:baseline;gap:6px;font-family:var(--f-mono)}
+#sec-ore .count b{font-size:40px;font-weight:500;line-height:1;color:var(--warn)}
+#sec-ore .count.done b{color:var(--accent)}
+#sec-ore .count span{font-size:15px;color:var(--muted)}
+#sec-ore .meter{display:grid;grid-template-columns:repeat(8,1fr);gap:3px}
+#sec-ore .meter i{height:10px;border-radius:2px;background:var(--sunk);position:relative;overflow:hidden}
+#sec-ore .meter i b{position:absolute;inset:0 auto 0 0;background:var(--warn)}
+#sec-ore .meter.done i b{background:var(--accent)}
+#sec-ore .entry{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:8px;align-items:center}
+#sec-ore .entry input{font-family:var(--f-mono);font-size:16px;text-align:right;height:40px}
+#sec-ore .entry select,#sec-ore .entry .btn{height:40px}
+#sec-ore .rows{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+#sec-ore .erow{display:grid;grid-template-columns:minmax(0,1fr) 80px 34px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+#sec-ore .erow .n{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
+#sec-ore .erow input{font-family:var(--f-mono);text-align:right;padding:5px 8px}
+#sec-ore .erow .x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;border-radius:6px;height:30px}
+#sec-ore .erow .x:hover{background:var(--crit-soft);color:var(--crit)}
+#sec-ore .sigla.att{background:var(--sunk);color:var(--muted)}
+#sec-ore .emptyday{color:var(--muted);font-size:13px;padding:10px 0}
+#sec-ore .week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+#sec-ore .wd{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 4px;text-align:center;cursor:pointer;font:inherit;color:var(--fg);display:flex;flex-direction:column;gap:1px;min-width:0}
+#sec-ore .wd small{font-size:11px;color:var(--muted)}
+#sec-ore .wd .h{font-family:var(--f-mono);font-size:15px}
+#sec-ore .wd.ok{background:var(--ok-soft);border-color:transparent}#sec-ore .wd.ok .h{color:var(--ok)}
+#sec-ore .wd.part{background:var(--warn-soft);border-color:transparent}#sec-ore .wd.part .h{color:var(--warn)}
+#sec-ore .wd.miss{border-color:var(--crit)}#sec-ore .wd.miss .h{color:var(--crit)}
+#sec-ore .wd.off{background:var(--sunk);border-color:transparent;color:var(--muted)}
+#sec-ore .wd.fut .h{color:var(--muted)}
+#sec-ore .wd[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:1px}
+#sec-ore .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+#sec-ore .cal .hd{font-size:10.5px;text-align:center;color:var(--muted);text-transform:uppercase}
+#sec-ore .cal button{border:0;border-radius:6px;padding:4px 0 3px;font:inherit;font-size:11px;cursor:pointer;background:transparent;color:var(--fg);display:flex;flex-direction:column;align-items:center;line-height:1.2}
+#sec-ore .cal button span{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+#sec-ore .cal button.ok{background:var(--ok-soft)}#sec-ore .cal button.ok span{color:var(--ok)}
+#sec-ore .cal button.part{background:var(--warn-soft)}#sec-ore .cal button.part span{color:var(--warn)}
+#sec-ore .cal button.miss{box-shadow:inset 0 0 0 1.5px var(--crit)}#sec-ore .cal button.miss span{color:var(--crit)}
+#sec-ore .cal button.off{color:var(--muted);opacity:.7}
+#sec-ore .cal button[aria-pressed=true]{outline:2px solid var(--accent)}
+#sec-ore .kv{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+#sec-ore .kv b{font-family:var(--f-mono);font-weight:500}
+#sec-ore .kv.crit b{color:var(--crit)}
+#sec-ore .tops{display:flex;flex-direction:column;gap:2px;max-height:250px;overflow:auto}
+#sec-ore .trow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;font-size:12.5px;align-items:baseline}
+#sec-ore .trow .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#sec-ore .trow .v{font-family:var(--f-mono);font-size:12px}
+#sec-ore .trow .b{grid-column:1/-1;height:3px;border-radius:2px;background:var(--sunk);overflow:hidden;margin-bottom:5px}
+#sec-ore .trow .b i{display:block;height:100%;background:var(--accent);opacity:.55}
+#sec-ore .rep{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#sec-ore .linkb{border:0;background:none;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:0;text-align:left}
+#sec-ore .linkb:disabled,#sec-ore .btn:disabled{opacity:.5;cursor:default}
+@media (max-width:900px){#sec-ore .ogrid{grid-template-columns:1fr}}
+@media (max-width:520px){#sec-ore .entry{grid-template-columns:80px minmax(0,1fr)}#sec-ore .entry .btn{grid-column:1/-1}#sec-ore .count b{font-size:34px}}
+</style>
+<section id="sec-ore" class="sec" hidden>
+<div class="wrap">
+  <div class="top">
+    <h1>Ore</h1>
+    <div class="daynav">
+      <button type="button" class="nb" id="oPrev" aria-label="Giorno precedente">‹</button>
+      <input type="date" id="oDate" aria-label="Giorno">
+      <button type="button" class="nb" id="oNext" aria-label="Giorno successivo">›</button>
+      <button type="button" class="nb txt" id="oToday">Oggi</button>
+    </div>
+  </div>
+  <div class="ogrid">
+    <div class="main">
+      <div class="card">
+        <div class="dayhead"><div class="dt" id="oDayT"></div><div class="count" id="oCount"></div></div>
+        <div class="meter" id="oMeter"></div>
+        <form class="entry" id="oForm" autocomplete="off">
+          <input id="oH" inputmode="decimal" placeholder="Ore" aria-label="Ore">
+          <select id="oC" aria-label="Cliente o attività"></select>
+          <button class="btn" type="submit">Segna</button>
+        </form>
+        <div class="rows" id="oRows"></div>
+      </div>
+      <div class="week" id="oWeek"></div>
+    </div>
+    <aside class="side">
+      <div class="box"><h4><span id="oMonT"></span></h4><div class="cal" id="oCal"></div><div id="oMonK"></div></div>
+      <div class="box"><h4><span id="oYearT"></span><b class="mono" id="oYearTot"></b></h4><div class="tops" id="oTops"></div></div>
+      <div class="box"><h4>Report annuale</h4>
+        <div class="rep"><select id="oRepY" aria-label="Anno del report"></select><button type="button" class="btn" id="oRep">Scarica Excel</button></div>
+        <div class="rep"><button type="button" class="linkb" id="oImpB">Importa timesheet Excel</button></div>
+        <input type="file" id="oImp" accept=".xlsx,.xls" hidden>
+      </div>
+    </aside>
+  </div>
+</div>
+</section>
+<script>(function(root){
+// dati: APP.data.ore[aaaa-mm-gg] = {commessa: ore, _f:{commessa: istante}}; APP.data.oreX[id] = {nome} (clienti fuori dal gestionale, solo da importazione)
+// commesse: "a:…" attività, "c:<uid>" clienti dell'anagrafica, "x:<id>" altri clienti
+const D=APP.data;D.ore=D.ore||{};D.oreX=D.oreX||{};
+const $=id=>root.querySelector("#"+id);
+const pad=n=>String(n).padStart(2,"0");
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const pd=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d);};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fh=n=>(Math.round(n*100)/100).toLocaleString("it-IT",{maximumFractionDigits:2});
+const MESI=["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+const GIORNI=["Domenica","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato"];
+const OBJ=8,BACK=14;
+// attività del timesheet (escluse "Predisposizione tools di lavoro" e "ReCognita Lab")
+const ATT=[
+  {k:"a:form",nome:"FORMAZIONE RECOGNITA",lbl:"Formazione ReCognita"},
+  {k:"a:formlab",nome:"FORMAZIONE RECOGNITA LAB",lbl:"Formazione ReCognita Lab"},
+  {k:"a:ferie",nome:"FERIE - PERMESSI - EX-FESTIVITA'",lbl:"Ferie, permessi, ex festività"},
+  {k:"a:fest",nome:"FESTIVITA'",lbl:"Festività"},
+  {k:"a:tni",nome:"TEMPI NON IMPUTABILI",lbl:"Tempi non imputabili"}];
+const ATT_SKIP=["PREDISPOSIZIONE TOOLS DI LAVORO","RECOGNITA LAB"];
+
+// ---- festività nazionali: niente avviso ----
+function pasqua(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(y,mo-1,da);}
+const _fest={};
+function festivo(d){const y=d.getFullYear();if(!_fest[y]){const p=pasqua(y);p.setDate(p.getDate()+1);
+  _fest[y]=new Set(["01-01","01-06","04-25","05-01","06-02","08-15","11-01","12-08","12-25","12-26",`${pad(p.getMonth()+1)}-${pad(p.getDate())}`]);}
+  return _fest[y].has(`${pad(d.getMonth()+1)}-${pad(d.getDate())}`);}
+const lavorativo=d=>d.getDay()>0&&d.getDay()<6&&!festivo(d);
+
+// ---- commesse ----
+function clienti(){
+  const a=APP.ana.filter(c=>c.uid&&(c.nome||c.sigla)).map(c=>({k:"c:"+c.uid,tipo:"cli",sigla:c.sigla||"",nome:c.nome||c.sigla,attivo:c.attivo!==false}));
+  const x=Object.keys(D.oreX).filter(id=>D.oreX[id]&&D.oreX[id].nome).map(id=>({k:"x:"+id,tipo:"ext",sigla:"",nome:D.oreX[id].nome,attivo:true}));
+  return [...a,...x];}
+function byK(k){if(k.startsWith("a:")){const a=ATT.find(x=>x.k===k);return a&&Object.assign({tipo:"att"},a);}return clienti().find(c=>c.k===k);}
+function label(c){if(!c)return "(cliente eliminato)";return c.tipo==="att"?c.lbl:c.sigla?`${c.sigla} · ${c.nome}`:c.nome;}
+const vals=k=>{const r=D.ore[k];const o={};if(r)for(const c in r){if(c==="_f")continue;const v=+r[c]||0;if(v>0)o[c]=v;}return o;};
+const dayTot=k=>{const o=vals(k);let t=0;for(const c in o)t+=o[c];return t;};
+function setH(k,c,v,now){const r=D.ore[k]||(D.ore[k]={_f:{}});r._f=r._f||{};r[c]=v>0?v:0;r._f[c]=now||Date.now();}
+// primo giorno con ore: prima di quel giorno non si chiede nulla
+function inizio(){let m=null;for(const k in D.ore)if(dayTot(k)>0&&(!m||k<m))m=k;return m;}
+function stato(d){const k=iso(d),t=dayTot(k);
+  if(!lavorativo(d))return t>0?"ok":"off";
+  if(t>=OBJ)return "ok";if(d>TODAY)return "fut";if(t>0)return "part";return d<TODAY?"miss":"part";}
+
+// ---- avvisi per il cruscotto: oggi e i giorni lavorativi delle ultime 2 settimane sotto le 8 ore ----
+function agenda(){const T=[],ini=inizio(),d=new Date(TODAY);
+  for(let i=0;i<=BACK;i++){const k=iso(d);
+    if(lavorativo(d)&&(i===0||(ini&&k>=ini))){const t=dayTot(k);
+      if(t<OBJ)T.push({id:k,sigla:"",nome:`${fh(t)} di ${OBJ} ore${t?` · mancano ${fh(OBJ-t)}`:""}`,txt:i===0?"Segnare le ore":"Ore incomplete",cls:i===0?"warn":"crit",d:new Date(d),sym:"o"});}
+    d.setDate(d.getDate()-1);}
+  return {T,prog:null};}
+
+// ---- giornata ----
+let sel=new Date(TODAY);
+let lastC="";try{lastC=localStorage.getItem("revisione_ore_last")||"";}catch(e){}
+function options(){
+  const cl=clienti().filter(c=>c.attivo).sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  const v=$("oC").value||lastC;
+  $("oC").innerHTML=`<option value="">Cliente o attività…</option><optgroup label="Clienti">${cl.map(c=>`<option value="${c.k}">${esc(label(c))}</option>`).join("")}</optgroup>`+
+    `<optgroup label="Attività">${ATT.map(a=>`<option value="${a.k}">${esc(a.lbl)}</option>`).join("")}</optgroup>`;
+  if([...$("oC").options].some(o=>o.value===v))$("oC").value=v;}
+function render(){
+  options();
+  const k=iso(sel),t=dayTot(k),r=vals(k),lav=lavorativo(sel);
+  $("oDate").value=k;
+  $("oDayT").innerHTML=`<small>${GIORNI[sel.getDay()]}${!lav?(festivo(sel)?" · festivo":" · non lavorativo"):""}</small>${sel.getDate()} ${MESI[sel.getMonth()].toLowerCase()} ${sel.getFullYear()}`;
+  const done=t>=OBJ;
+  $("oCount").className="count"+(done?" done":"");$("oCount").innerHTML=`<b>${fh(t)}</b><span>/ ${OBJ} ore</span>`;
+  $("oMeter").className="meter"+(done?" done":"");
+  $("oMeter").innerHTML=Array.from({length:OBJ},(_,i)=>`<i><b style="width:${Math.max(0,Math.min(1,t-i))*100}%"></b></i>`).join("");
+  const ordK=x=>{const c=byK(x);return (c&&c.tipo==="att"?"1":"0")+label(c);};
+  const ks=Object.keys(r).sort((a,b)=>ordK(a).localeCompare(ordK(b),"it"));
+  $("oRows").innerHTML=ks.length?ks.map(x=>{const c=byK(x);
+    const n=c&&c.tipo==="att"?`<span class="sigla att">att.</span> ${esc(c.lbl)}`:c&&c.sigla?`<span class="sigla">${esc(c.sigla)}</span> ${esc(c.nome)}`:esc(label(c));
+    return `<div class="erow"><span class="n">${n}</span><input data-k="${x}" inputmode="decimal" value="${fh(r[x])}" aria-label="Ore ${esc(label(c))}"><button type="button" class="x" data-del="${x}" aria-label="Elimina">×</button></div>`;}).join("")
+    :`<div class="emptyday">Nessuna ora segnata.</div>`;
+  // settimana
+  const m=new Date(sel);m.setDate(m.getDate()-((m.getDay()+6)%7));
+  const ini0=inizio();
+  $("oWeek").innerHTML=Array.from({length:7},(_,i)=>{const d=new Date(m);d.setDate(m.getDate()+i);const tt=dayTot(iso(d));let st=stato(d);if(st==="miss"&&(!ini0||iso(d)<ini0))st="";
+    return `<button type="button" class="wd ${st}" data-d="${iso(d)}" aria-pressed="${iso(d)===k}"><small>${GIORNI[d.getDay()].slice(0,3)} ${d.getDate()}</small><span class="h">${tt?fh(tt):"–"}</span></button>`;}).join("");
+  // mese
+  const y=sel.getFullYear(),mo=sel.getMonth(),first=new Date(y,mo,1),nd=new Date(y,mo+1,0).getDate(),ini=inizio();
+  $("oMonT").textContent=`${MESI[mo]} ${y}`;
+  let h=["L","M","M","G","V","S","D"].map(x=>`<span class="hd">${x}</span>`).join("")+"<span></span>".repeat((first.getDay()+6)%7);
+  let mt=0,miss=0;
+  for(let g=1;g<=nd;g++){const d=new Date(y,mo,g),dk=iso(d),tt=dayTot(dk);let st=stato(d);
+    if(st==="miss"&&(!ini||dk<ini))st="";
+    mt+=tt;if(st==="miss"||(st==="part"&&d<TODAY))miss++;
+    h+=`<button type="button" class="${st}" data-d="${dk}" aria-pressed="${dk===k}">${g}<span>${tt?fh(tt):"·"}</span></button>`;}
+  $("oCal").innerHTML=h;
+  $("oMonK").innerHTML=`<div class="kv"><span>Totale mese</span><b>${fh(mt)}</b></div>${miss?`<div class="kv crit"><span>Giorni incompleti</span><b>${miss}</b></div>`:""}`;
+  // ore clienti dell'anno
+  const tot={};let yt=0;
+  for(const dk in D.ore){if(+dk.slice(0,4)!==y)continue;const o=vals(dk);for(const c in o){if(c.startsWith("a:"))continue;tot[c]=(tot[c]||0)+o[c];yt+=o[c];}}
+  $("oYearT").textContent=`Ore clienti ${y}`;$("oYearTot").textContent=fh(yt)+" h";
+  const arr=Object.entries(tot).sort((a,b)=>b[1]-a[1]),mx=arr.length?arr[0][1]:1;
+  $("oTops").innerHTML=arr.map(([c,v])=>`<div class="trow"><span class="nm">${esc(label(byK(c)))}</span><span class="v">${fh(v)}</span><span class="b"><i style="width:${v/mx*100}%"></i></span></div>`).join("")||`<span class="muted">Nessuna ora sui clienti nell'anno.</span>`;
+  // anni del report
+  const ys=new Set(Object.keys(D.ore).filter(dk=>dayTot(dk)>0).map(x=>+x.slice(0,4)));ys.add(TODAY.getFullYear());
+  const prev=$("oRepY").value;$("oRepY").innerHTML=[...ys].sort((a,b)=>b-a).map(v=>`<option>${v}</option>`).join("");
+  $("oRepY").value=prev&&ys.has(+prev)?prev:String(y);
+}
+const num=v=>{v=String(v||"").trim().replace(",",".");if(!v)return NaN;return Math.round(parseFloat(v)*100)/100;};
+function toast(t){let b=document.getElementById("gBar");if(!b){b=document.createElement("div");b.id="gBar";b.className="gbar";document.body.appendChild(b);}
+  b.textContent=t;b.hidden=false;clearTimeout(b._t);b._t=setTimeout(()=>b.hidden=true,5000);}
+$("oForm").addEventListener("submit",e=>{e.preventDefault();const h=num($("oH").value),c=$("oC").value;
+  if(!(h>0)){toast("Scrivi le ore, per esempio 2 o 1,5");$("oH").focus();return;}
+  if(!c){toast("Scegli il cliente o l'attività");$("oC").focus();return;}
+  const k=iso(sel);setH(k,c,Math.round(((vals(k)[c]||0)+h)*100)/100);APP.changed();
+  lastC=c;try{localStorage.setItem("revisione_ore_last",c);}catch(x){}
+  $("oH").value="";render();$("oH").focus();});
+$("oRows").addEventListener("change",e=>{const i=e.target.closest("input[data-k]");if(!i)return;const v=num(i.value);
+  if(!isNaN(v)&&v>=0){setH(iso(sel),i.dataset.k,v);APP.changed();}render();});
+$("oRows").addEventListener("click",e=>{const b=e.target.closest("[data-del]");if(!b)return;setH(iso(sel),b.dataset.del,0);APP.changed();render();});
+root.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(b){sel=pd(b.dataset.d);render();}});
+const step=n=>{sel=new Date(sel);sel.setDate(sel.getDate()+n);render();};
+$("oPrev").onclick=()=>step(-1);$("oNext").onclick=()=>step(1);
+$("oToday").onclick=()=>{sel=new Date(TODAY);render();};
+$("oDate").addEventListener("change",()=>{const v=$("oDate").value;if(v&&+v.slice(0,4)>=1900){sel=pd(v);render();}});
+
+// ---- librerie (solo quando servono) ----
+const _lib={};
+function lib(url,g){return window[g]?Promise.resolve():(_lib[url]||(_lib[url]=new Promise((ok,ko)=>{const s=document.createElement("script");s.src=url;s.onload=ok;s.onerror=()=>{delete _lib[url];ko(new Error("libreria non raggiungibile"));};document.head.appendChild(s);})));}
+const EXCELJS="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+const SHEETJS="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+function colL(n){let s="";while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}return s;}
+
+// ---- report annuale: struttura del timesheet, senza colori; attività e poi clienti con ore in ordine alfabetico ----
+async function buildReport(year){
+  await lib(EXCELJS,"ExcelJS");
+  const F={name:"Century Gothic",size:10},FB={name:"Century Gothic",size:10,bold:true};
+  const thin={style:"thin"},med={style:"medium"};
+  const H=Array.from({length:12},()=>({}));const used=new Set();
+  for(const dk in D.ore){if(+dk.slice(0,4)!==year)continue;const m=+dk.slice(5,7)-1,g=+dk.slice(8,10),o=vals(dk);
+    for(const c in o){(H[m][c]||(H[m][c]={}))[g]=o[c];used.add(c);}}
+  const cl=[...used].filter(k=>!k.startsWith("a:")).map(k=>byK(k)||{k,nome:"(cliente eliminato)"}).sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  const rowsDef=[...ATT.map(a=>({c:a,att:1})),...cl.map((c,i)=>({c,first:i===0}))];
+  const R0=3,RL=R0+rowsDef.length-1,ROW={};rowsDef.forEach((r,i)=>ROW[r.c.k]=R0+i);
+  const wb=new ExcelJS.Workbook();wb.creator="Revisione";
+  MESI.forEach((mn,m)=>{
+    const nd=new Date(year,m+1,0).getDate(),LC=colL(2+nd);
+    const ws=wb.addWorksheet(mn,{views:[{state:"frozen",xSplit:2,ySplit:2,showGridLines:false,zoomScale:80}]});
+    ws.getColumn(1).width=60;ws.getColumn(2).width=11.8;for(let g=1;g<=nd;g++)ws.getColumn(2+g).width=11;
+    const day=(r,g,v,extra)=>{const c=ws.getCell(r,2+g);if(v!=null)c.value=v;c.font=F;c.alignment={horizontal:"center"};c.border={top:thin};if(extra)Object.assign(c,extra);return c;};
+    const tot=(r,v,f)=>{const c=ws.getCell(r,2);c.value=f?{formula:f,result:v}:v;c.font=FB;c.alignment={horizontal:"center",vertical:"top"};c.border={left:med,right:med,top:thin};return c;};
+    tot(1,"Totale ore").border={left:med,right:med,top:med,bottom:thin};
+    const a2=ws.getCell(2,1);a2.value="Commessa";a2.font=FB;a2.alignment={vertical:"top"};a2.border={bottom:thin};
+    tot(2,null);
+    for(let g=1;g<=nd;g++){day(1,g,GIORNI[new Date(year,m,g).getDay()]);day(2,g,new Date(Date.UTC(year,m,g)),{numFmt:"dd/mm/yy;@"});}
+    rowsDef.forEach((rd,i)=>{const r=R0+i,hh=H[m][rd.c.k]||{};
+      const a=ws.getCell(r,1);a.value=rd.c.nome;a.alignment={vertical:"top"};a.font=rd.att?FB:F;if(rd.first)a.border={top:thin};
+      let s=0;for(let g=1;g<=nd;g++){const v=hh[g];if(v)s+=v;day(r,g,v||null);}
+      tot(r,s,`+SUM(C${r}:${LC}${r})`);});
+    ws.getCell(RL,2).border={left:med,right:med,top:thin,bottom:med};
+    const r1=RL+2,r2=RL+3,rf=ROW["a:ferie"];
+    const l1=ws.getCell(r1,1);l1.value="ORE RECOGNITA";l1.font=FB;
+    const l2=ws.getCell(r2,1);l2.value="ORE TOTALI";l2.font=F;
+    for(let g=1;g<=nd;g++){const L=colL(2+g);let a=0,b=0;
+      rowsDef.forEach((rd,i)=>{const v=(H[m][rd.c.k]||{})[g]||0;b+=v;if(R0+i>=rf)a+=v;});
+      const c1=ws.getCell(r1,2+g);c1.value={formula:`SUM(${L}${rf}:${L}${RL})`,result:a};c1.font=FB;c1.alignment={horizontal:"center"};
+      const c2=ws.getCell(r2,2+g);c2.value={formula:`SUM(${L}${R0}:${L}${RL})`,result:b};c2.font=F;c2.alignment={horizontal:"center"};c2.numFmt="0";}
+  });
+  const wt=wb.addWorksheet("Totali",{views:[{showGridLines:false}]});
+  [2.33,57,9.33].forEach((w,i)=>wt.getColumn(i+1).width=w);
+  const sumRef=r=>"+"+MESI.map(m=>`${m}!B${r}`).join("+");
+  const yearTot=k=>{let s=0;for(const dk in D.ore)if(+dk.slice(0,4)===year)s+=vals(dk)[k]||0;return s;};
+  const box={top:thin,left:thin,bottom:thin,right:thin};
+  rowsDef.forEach((rd,j)=>{const r=2+j,k=rd.c.k;
+    const a=wt.getCell(r,2);a.value=rd.c.nome;a.font=rd.att?FB:F;a.alignment={vertical:"top"};a.border=box;
+    const b=wt.getCell(r,3);b.value={formula:sumRef(ROW[k]),result:yearTot(k)};b.font=FB;b.alignment={horizontal:"center",vertical:"top"};b.border=box;});
+  return wb.xlsx.writeBuffer();
+}
+$("oRep").onclick=async()=>{const y=+$("oRepY").value,b=$("oRep");b.disabled=true;b.textContent="Preparo…";
+  try{const buf=await buildReport(y);
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    a.download=`Timesheet_gen-dic_${y}.xlsx`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+  }catch(e){toast("Report non riuscito: "+e.message);}
+  b.disabled=false;b.textContent="Scarica Excel";};
+
+// ---- importazione del timesheet Excel: sostituisce le ore di quell'anno, aggiunge solo i clienti con ore ----
+const norm=s=>String(s||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+$("oImpB").onclick=()=>$("oImp").click();
+$("oImp").onchange=async()=>{const f=$("oImp").files[0];$("oImp").value="";if(!f)return;
+  const btn=$("oImpB");btn.disabled=true;
+  try{await lib(SHEETJS,"XLSX");const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
+    if(!MESI.some(m=>wb.Sheets[m]))throw new Error("il file non ha i fogli dei mesi");
+    const ym=f.name.match(/20\d\d/),year=ym?+ym[0]:TODAY.getFullYear(),now=Date.now();
+    const map={};ATT.forEach(a=>map[norm(a.nome)]=a.k);clienti().forEach(c=>{map[norm(c.nome)]=c.k;});
+    const skip=new Set(ATT_SKIP.map(norm));
+    const nuovo={};let n=0,nuovi=0;
+    MESI.forEach((mn,m)=>{const ws=wb.Sheets[mn];if(!ws)return;const nd=new Date(year,m+1,0).getDate();
+      for(let r=3;r<=500;r++){const a=(ws["A"+r]||{}).v;if(!a)continue;const na=norm(a);if(na==="ORERECOGNITA")break;if(skip.has(na))continue;
+        const vv=[];for(let g=1;g<=nd;g++){const v=(ws[colL(2+g)+r]||{}).v;if(typeof v==="number"&&v>0)vv.push([g,v]);}
+        if(!vv.length)continue;
+        let k=map[na];if(!k){const id=now.toString(36)+"_"+(nuovi++);D.oreX[id]={nome:String(a).trim(),_f:{nome:now}};k="x:"+id;map[na]=k;}
+        vv.forEach(([g,v])=>{const dk=`${year}-${pad(m+1)}-${pad(g)}`;(nuovo[dk]||(nuovo[dk]={}))[k]=v;n+=v;});}});
+    // le ore già presenti in quell'anno vengono sostituite dal file
+    for(const dk in D.ore)if(+dk.slice(0,4)===year)for(const c in vals(dk))setH(dk,c,0,now);
+    for(const dk in nuovo)for(const c in nuovo[dk])setH(dk,c,nuovo[dk][c],now);
+    APP.changed();render();toast(`Importate ${fh(n)} ore su ${Object.keys(nuovo).length} giorni (${year})${nuovi?` · ${nuovi} clienti aggiunti`:""}`);
+  }catch(e){toast("Importazione non riuscita: "+e.message);}
+  btn.disabled=false;};
+
+APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(id))sel=pd(id);}};
+})(document.getElementById('sec-ore'));</script>
 
 <style>
 /* Cruscotto: lista delle azioni (subito, da fare, questa settimana) a sinistra; avanzamento e collaboratori a destra */
@@ -2421,8 +2735,8 @@ APP.sec['bilanci']={render:()=>render()};
 </div>
 </section>
 <script>(function(root){
-const SECS=[["dichiarativi","Dichiarativi"],["inventari","Inventari"],["controlli","Controlli contabili"],["circolarizzazioni","Circolarizzazioni"],["general","General"],["audit","Audit"]];
-const PERSONE=["Nicolò","Giada","Andrea"],SYM={d:"□",s:"○",r:"◆"},SYMT={d:"data",s:"spunta",r:"sollecito"};
+const SECS=[["dichiarativi","Dichiarativi"],["inventari","Inventari"],["controlli","Controlli contabili"],["circolarizzazioni","Circolarizzazioni"],["general","General"],["audit","Audit"],["ore","Ore"]];
+const PERSONE=["Nicolò","Giada","Andrea"],SYM={d:"□",s:"○",r:"◆",o:"◷"},SYMT={d:"data",s:"spunta",r:"sollecito",o:"ore"};
 const DAY=864e5,SETT=7,PROSSIME=10;
 const pad=n=>String(n).padStart(2,"0");
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -2456,7 +2770,7 @@ function render(){
   const cur=T.filter(t=>!t.fut),fut=T.filter(t=>t.fut).sort(ord);
   const week=t=>t.fut&&t.n<=SETT;
   const cnt=s=>T.filter(t=>(!t.fut||week(t))&&(!s||t.s===s)).length;
-  if(sec&&!P[sec])sec="";
+  if(sec&&!(sec in P))sec="";
   root.querySelector("#cFilt").innerHTML=[["","Tutte"],...SECS].map(([k,l])=>`<button type="button" class="fp" data-f="${k}" aria-pressed="${sec===k}">${l}<span class="n">${cnt(k)}</span></button>`).join("");
 
   const mine=t=>!sec||t.s===sec;
@@ -2464,7 +2778,7 @@ function render(){
   const wk=fut.filter(t=>week(t)&&mine(t)),oltre=fut.filter(t=>!week(t)&&mine(t));
   const row=t=>`<button type="button" class="item go ${t.fut?"":t.cls}" data-s="${t.s}" data-id="${t.id}"><span class="bar"></span>${when(t)}
     <span class="sym" title="${SYMT[t.sym]||""}">${SYM[t.sym]||""}</span>
-    <span class="what"><b>${esc(t.txt)}</b><span><span class="sigla">${esc(t.sigla)}</span> ${esc(t.nome)}</span></span>
+    <span class="what"><b>${esc(t.txt)}</b><span>${t.sigla?`<span class="sigla">${esc(t.sigla)}</span> `:""}${esc(t.nome)}</span></span>
     <span class="r">${sec?"":`<span class="secchip">${name(t.s)}</span>`}${t.who?`<span class="ini" title="${esc(t.who)}">${esc(t.who[0])}</span>`:""}</span></button>`;
   const grp=(cls,title,arr,extra)=>arr.length?`<div class="grp ${cls}"><h3>${title} <span class="n">${arr.length}</span>${extra||""}</h3><div class="items">${arr.map(row).join("")}</div></div>`:"";
   const fine=new Date(t0.getTime()+SETT*DAY);
@@ -2500,7 +2814,7 @@ document.getElementById("gToday").textContent=`${pad(TODAY.getDate())}/${pad(TOD
 function show(s){document.querySelectorAll(".sec").forEach(x=>x.hidden=x.id!=="sec-"+s);
   document.querySelectorAll("#gNav a[data-s]").forEach(a=>a.toggleAttribute("aria-current",a.dataset.s===s));
   if(APP.sec[s])APP.sec[s].render();try{localStorage.setItem("revisione_tab",s);}catch(e){}window.scrollTo(0,0);}
-APP.goto=(s,id)=>{show(s);const tr=document.querySelector('#sec-'+s+' tbody tr[data-id="'+id+'"]');if(tr)tr.children[1].click();};
+APP.goto=(s,id)=>{if(APP.sec[s]&&APP.sec[s].focus){APP.sec[s].focus(id);show(s);return;}show(s);const tr=document.querySelector('#sec-'+s+' tbody tr[data-id="'+id+'"]');if(tr)tr.children[1].click();};
 document.getElementById("gNav").onclick=e=>{const a=e.target.closest("a[data-s]");if(a)show(a.dataset.s);};
 const imp=document.getElementById("gImp"),pop=document.getElementById("gPop");
 imp.onchange=async()=>{const f=imp.files[0];imp.value="";if(!f)return;
