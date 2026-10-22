@@ -136,6 +136,7 @@ legend{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:
 #gNav[hidden],.dpop[hidden],.gbar[hidden]{display:none}
 .dpop button{border:0;background:none;text-align:left;font:inherit;font-size:13.5px;color:var(--fg);padding:9px 12px;border-radius:7px;cursor:pointer}
 .dpop button:hover{background:var(--sunk)}
+.dpop .ver{font-size:11.5px;color:var(--muted);padding:7px 12px 5px;border-top:1px solid var(--line);margin-top:4px}
 .start{max-width:560px;margin:8vh auto 0;display:flex;flex-direction:column;gap:14px}
 .start p{margin:0;color:var(--muted)}
 .start .row{display:flex;flex-wrap:wrap;gap:10px}
@@ -314,6 +315,7 @@ function OUTLOOK(t){const L=t.split("\n");const to=(L[0]||"").replace(/^A:\s*/,"
           <button type="button" data-m="exp">Scarica copia di sicurezza</button>
           <button type="button" data-m="imp">Importa file dati</button>
           <button type="button" data-m="out">Esci da Drive</button>
+          <div class="ver mono" id="gVer"></div>
         </div><input type="file" id="gImp" accept=".json,application/json" hidden></div></div>
   </div>
   <nav class="tabs" aria-label="Sezioni" id="gNav">
@@ -2811,6 +2813,9 @@ APP.sec.cruscotto={render:()=>render()};
 })(document.getElementById('sec-cruscotto'));</script>
 <script>
 (function(){
+// versione caricata: da aggiornare a ogni pubblicazione
+const VERSIONE="22/10/2026 16:30";
+document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
 document.getElementById("gSeason").textContent=`Stagione ${X}/${String(X+1).slice(2)}`;
