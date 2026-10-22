@@ -2629,8 +2629,8 @@ async function buildReport(year){
   const sumRef=r=>"+"+MESI.map(m=>`${m}!B${r}`).join("+");
   const yearTot=k=>{let s=0;for(const dk in D.ore)if(+dk.slice(0,4)===year)s+=vals(dk)[k]||0;return s;};
   const box={top:thin,left:thin,bottom:thin,right:thin};
-  rowsDef.forEach((rd,j)=>{const r=2+j,k=rd.c.k;
-    const a=wt.getCell(r,2);a.value=rd.c.nome;a.font=rd.att?FB:F;a.alignment={vertical:"top"};a.border=box;
+  rowsDef.filter(rd=>!rd.att).forEach((rd,j)=>{const r=2+j,k=rd.c.k;
+    const a=wt.getCell(r,2);a.value=rd.c.nome;a.font=F;a.alignment={vertical:"top"};a.border=box;
     const b=wt.getCell(r,3);b.value={formula:sumRef(ROW[k]),result:yearTot(k)};b.font=FB;b.alignment={horizontal:"center",vertical:"top"};b.border=box;});
   return wb.xlsx.writeBuffer();
 }
@@ -2661,6 +2661,7 @@ $("oImp").onchange=async()=>{const f=$("oImp").files[0];$("oImp").value="";if(!f
     // le ore già presenti in quell'anno vengono sostituite dal file
     for(const dk in D.ore)if(+dk.slice(0,4)===year)for(const c in vals(dk))setH(dk,c,0,now);
     for(const dk in nuovo)for(const c in nuovo[dk])setH(dk,c,nuovo[dk][c],now);
+    const last=Object.keys(nuovo).sort().pop();if(last)sel=pd(last);
     APP.changed();render();toast(`Importate ${fh(n)} ore su ${Object.keys(nuovo).length} giorni (${year})${nuovi?` · ${nuovi} clienti aggiunti`:""}`);
   }catch(e){toast("Importazione non riuscita: "+e.message);}
   btn.disabled=false;};
@@ -2814,7 +2815,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="22/10/2026 16:30";
+const VERSIONE="22/10/2026 16:55";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
