@@ -1450,8 +1450,13 @@ function openSol(){
 const b64=s=>btoa(unescape(encodeURIComponent(s)));
 function eml(c,t){const L=t.split("\n"),sub=(L[1]||"").replace(/^Oggetto:\s*/,""),body=L.slice(3).join("\r\n");
   const words=(sub.match(/.{1,30}/g)||[""]).map(p=>`=?UTF-8?B?${b64(p)}?=`).join("\r\n ");
-  return ["X-Unsent: 1","To: "+solTo(c).join(", "),"Subject: "+words,"MIME-Version: 1.0","Content-Type: text/plain; charset=UTF-8","Content-Transfer-Encoding: base64","",
-    b64(body).replace(/.{1,76}/g,"$&\r\n")].join("\r\n");}
+  // HTML in Century Gothic 11, così Outlook apre il messaggio in HTML e la firma resta completa (logo e formattazione)
+  const F="font-family:'Century Gothic',sans-serif;font-size:11pt",P=t=>`<p class=MsoNormal style="margin:0;${F}">${t||"&nbsp;"}</p>`;let html="",ul=[];
+  const flush=()=>{if(ul.length){html+=`<ul style="margin-top:0;margin-bottom:0">${ul.map(t=>`<li class=MsoNormal style="margin:0;${F}">${t}</li>`).join("")}</ul>`;ul=[];}};
+  body.split("\r\n").forEach(l=>{const m=l.match(/^•\s*(.*)$/);if(m){ul.push(esc(m[1]));return;}flush();html+=P(esc(l));});flush();html+=P("")+P("");
+  const doc=`<html><head><meta charset="utf-8"></head><body style="${F}">${html}</body></html>`;
+  return ["X-Unsent: 1","To: "+solTo(c).join(", "),"Subject: "+words,"MIME-Version: 1.0","Content-Type: text/html; charset=UTF-8","Content-Transfer-Encoding: base64","",
+    b64(doc).replace(/.{1,76}/g,"$&\r\n")].join("\r\n");}
 async function solGo(){
   const L=solCands().filter(c=>solTo(c).length&&!solOff.has(c.id));if(!L.length)return;
   const fn=c=>`${c.sigla.replace(/[\\/:*?"<>|]/g,"")} - Sollecito dichiarativi.eml`,blob=s=>new Blob([s],{type:"message/rfc822"});
@@ -3642,7 +3647,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="26/10/2026 10:14";
+const VERSIONE="26/10/2026 10:46";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
