@@ -299,7 +299,7 @@ const DOCGEN=(()=>{
     if(items.length===1){save(await fill(items[0].key,items[0].vals),items[0].name);return;}
     await lib();const out=new JSZip();for(const it of items)out.file(it.name,await fill(it.key,it.vals));
     save(await out.generateAsync({type:"blob",compression:"DEFLATE"}),zipName);}
-  return {itD,itL,enL,fill,save,many};
+  return {itD,itL,enL,fill,save,many,lib};
 })();
 
 // ---- scadenze fiscali: regole fisse, slittamento al primo giorno lavorativo, proroghe in APP.data.scadX[chiave] = {d, nota} ----
@@ -1278,7 +1278,16 @@ APP.sec.controlli.parts=()=>{const a=clients.filter(c=>c.attiva);
 #sec-dichiarativi .mailbox textarea{font-family:var(--f-body);font-size:13px;min-height:230px}
 #sec-dichiarativi .prof{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
 #sec-dichiarativi .toast{font-size:12.5px;color:var(--muted)}
-#sec-dichiarativi table{min-width:900px}</style>
+#sec-dichiarativi table{min-width:900px}
+#sec-dichiarativi .sl{grid-column:1/-1;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+#sec-dichiarativi .slr{display:grid;grid-template-columns:20px auto 1fr auto;gap:10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line);cursor:pointer;font-size:13.5px}
+#sec-dichiarativi .slr:first-child{border-top:0}
+#sec-dichiarativi .slr.off{opacity:.55}
+#sec-dichiarativi .slr.dis{cursor:default}
+#sec-dichiarativi .slr .nm small{display:block;color:var(--muted);font-size:12px}
+#sec-dichiarativi .slr .st{font-size:12px;color:var(--muted);white-space:nowrap}
+#sec-dichiarativi .slr .st.ok{color:var(--ok)}
+#sec-dichiarativi .btn:disabled{opacity:.45;cursor:not-allowed}</style>
 <section id="sec-dichiarativi" class="sec" hidden><span id="seasonLbl" hidden></span>
 
 
@@ -1291,6 +1300,7 @@ APP.sec.controlli.parts=()=>{const a=clients.filter(c=>c.attiva);
     <input type="search" id="q" placeholder="Cerca">
     <select id="fColl" aria-label="Incaricato verifiche"></select>
     <label class="chk"><input type="checkbox" id="fNa"> Mostra esclusi</label>
+    <button type="button" class="btn ghost" id="solBtn" style="margin-left:auto" hidden>Solleciti</button>
   </div>
   <div class="tablebox">
     <table>
@@ -1415,7 +1425,48 @@ function _render(){
     <td><span class="pill ${m.cls}">${m.txt}</span></td>
     ${c.attiva?`<td>${track(c,"770")}</td><td>${track(c,"ri")}</td>`:`<td colspan="2" class="na">${c.tipo}</td>`}</tr>`).join("")
     ||`<tr><td colspan="6" class="na" style="padding:20px">Nessun cliente.</td></tr>`;
+  const sb=$("solBtn"),sn=solCands().filter(c=>!solDate(c)).length;
+  sb.hidden=!solCands().length;sb.textContent=sn?`Solleciti (${sn})`:"Solleciti";
 }
+// ---- solleciti in blocco: clienti diretti con richiesta inviata e modelli mancanti ----
+const solKs=c=>["770","ri"].filter(k=>c[k].ric&&missing(c,k).length);
+const solCands=()=>clients.filter(c=>c.attiva&&c.tipo==="Diretto"&&solKs(c).length);
+const solTo=c=>String(c.contatto||"").split(/[;,\s]+/).filter(x=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x));
+const solDate=c=>solKs(c).map(k=>c[k].sol).filter(s=>typeof s==="string"&&s).sort().pop()||"";
+let solOff=new Set(),solMsg="";
+function openSol(){
+  const L=solCands().sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  const on=L.filter(c=>solTo(c).length&&!solOff.has(c.id));
+  $("dSigla").hidden=true;$("dTitle").textContent="Solleciti dichiarativi";
+  $("dBody").innerHTML=L.length?`<div class="sl">${L.map(c=>{const ok=solTo(c).length,sd=solDate(c),sel=ok&&!solOff.has(c.id);
+    const ms=solKs(c).flatMap(k=>missing(c,k).map(([,l])=>l)).join(" · ");
+    return `<label class="slr ${sel?"":"off"} ${ok?"":"dis"}"><input type="checkbox" data-sx="${c.id}" ${sel?"checked":""} ${ok?"":"disabled"} aria-label="${esc(c.sigla)}">
+      <span class="sigla">${esc(c.sigla)}</span><span class="nm">${esc(c.nome)}<small>${esc(ms)}</small></span>
+      <span class="st ${sd?"ok":""}">${!ok?"nessuna mail in anagrafica":sd?"sollecitato "+dd(pd(sd)).slice(0,5):""}</span></label>`;}).join("")}</div>
+    <div class="row2"><button type="button" class="btn" data-solgo="1" ${on.length?"":"disabled"}>Scarica ${on.length===1?"1 mail":on.length?on.length+" mail":"mail"}</button>${solMsg?`<span class="toast">${esc(solMsg)}</span>`:""}</div>`
+    :`<div class="na">Nessun sollecito da fare.</div>`;
+  $("drawerBox").hidden=false;
+}
+const b64=s=>btoa(unescape(encodeURIComponent(s)));
+function eml(c,t){const L=t.split("\n"),sub=(L[1]||"").replace(/^Oggetto:\s*/,""),body=L.slice(3).join("\r\n");
+  const words=(sub.match(/.{1,30}/g)||[""]).map(p=>`=?UTF-8?B?${b64(p)}?=`).join("\r\n ");
+  return ["X-Unsent: 1","To: "+solTo(c).join(", "),"Subject: "+words,"MIME-Version: 1.0","Content-Type: text/plain; charset=UTF-8","Content-Transfer-Encoding: base64","",
+    b64(body).replace(/.{1,76}/g,"$&\r\n")].join("\r\n");}
+async function solGo(){
+  const L=solCands().filter(c=>solTo(c).length&&!solOff.has(c.id));if(!L.length)return;
+  const fn=c=>`${c.sigla.replace(/[\\/:*?"<>|]/g,"")} - Sollecito dichiarativi.eml`,blob=s=>new Blob([s],{type:"message/rfc822"});
+  const files=L.map(c=>[fn(c),eml(c,mailText(c,solKs(c),true))]);
+  solMsg="Preparazione…";openSol();
+  try{
+    if(files.length===1)DOCGEN.save(blob(files[0][1]),files[0][0]);
+    else{await DOCGEN.lib();const z=new JSZip();files.forEach(([n,s])=>z.file(n,s));
+      DOCGEN.save(await z.generateAsync({type:"blob",compression:"DEFLATE"}),`Solleciti dichiarativi ${dd(TODAY).replace(/\//g,"-")}.zip`);}
+    L.forEach(c=>{solKs(c).forEach(k=>{c[k].sol=ISO();});solOff.add(c.id);});
+    solMsg=files.length===1?"Mail scaricata: aprila con doppio clic":`Scaricate ${files.length} mail: apri lo zip, Ctrl+A e Invio`;
+  }catch(e){solMsg="Errore: "+e.message;}
+  render();if(openId==="sol")openSol();
+}
+$("solBtn").onclick=()=>{mailOpen=null;toast=null;solMsg="";openId="sol";solOff=new Set(solCands().filter(c=>solDate(c)).map(c=>c.id));openSol();};
 $("todo").onclick=e=>{const b=e.target.closest("[data-g]");if(!b)return;ui.group=ui.group===b.dataset.g?"":b.dataset.g;render();};
 $("q").oninput=e=>{ui.q=e.target.value.toLowerCase();render();};
 $("fColl").onchange=e=>{ui.coll=e.target.value;render();};
@@ -1424,7 +1475,7 @@ $("rows").onclick=e=>{const tr=e.target.closest("tr[data-id]");if(tr)openDrawer(
 $("rows").onkeydown=e=>{if(e.key==="Enter"){const tr=e.target.closest("tr[data-id]");if(tr)openDrawer(+tr.dataset.id);}};
 
 // ---- mail dai modelli Outlook ----
-const TXT={"dip":"Modello 770 (dipendenti)","aut":"Modello 770 (autonomi)","cap":"Modello 770 (capitali)","red":"Modello Società di Capitali","irap":"Modello Irap"};
+const TXT={"dip":"Modello 770 (dipendenti)","aut":"Modello 770 (autonomi)","cap":"Modello 770 (capitali)","red":"Modello Redditi SC","irap":"Modello IRAP"};
 function elenco(c,ks,soloMancanti){
   const out=[];ks.forEach(k=>(soloMancanti?missing(c,k):need(c,k)).forEach(([m])=>out.push(TXT[m])));
   // 770 unito come nel modello, se servono tutte e tre le parti
@@ -1435,9 +1486,9 @@ function elenco(c,ks,soloMancanti){
 }
 function mailText(c,ks,soll){
   const bl=blocchi(c),ogg=`${soll?"Sollecito - ":""}Dichiarativi ${X} redditi ${X-1} - ${c.nome}`;
-  const corpo=soll?`Buongiorno,\nfacendo seguito alla nostra precedente richiesta, Vi segnaliamo che non abbiamo ancora ricevuto copia dei seguenti dichiarativi:\n${elenco(c,ks,true)}\nVi chiediamo cortesemente di inoltrarceli non appena disponibili, in modo da poter procedere alle opportune verifiche formali prima dell'invio all'Agenzia delle Entrate.`
+  const corpo=soll?`Buongiorno,\nvi ricordo di inoltrarci i dichiarativi richiesti prima del loro invio, in modo da poter procedere con le nostre verifiche.\nI dichiarativi che risultano non ancora ricevuti sono:\n${elenco(c,ks,true)}`
     :`Buongiorno,\nla presente per richiedere copia dei dichiarativi sottoelencati (non appena disponibili) in modo da poter procedere alle opportune verifiche formali prima dell'invio all'Agenzia delle Entrate:\n${elenco(c,ks,false)}`;
-  return `A: ${c.contatto||"(contatto mancante in anagrafica)"}\nOggetto: ${ogg}\n\n${corpo}\n\nGrazie\nCordiali saluti`;
+  return `A: ${c.contatto||"(contatto mancante in anagrafica)"}\nOggetto: ${ogg}\n\n${corpo}\n\nGrazie\n${soll?"Saluti":"Cordiali saluti"}`;
 }
 // ---- scheda ----
 let openId=null,mailOpen=null,toast=null,toastMsg="";
@@ -1450,7 +1501,7 @@ function blockUI(c,k){
   return `<fieldset><legend>${bl.label}</legend>
     <div class="ro"><span>Scadenza invio</span><b>${dd(bl.scad)}</b></div>
     ${c.tipo!=="Diretto"?row("ric",`Richiesta fatta${c.richDa?" da "+esc(c.richDa):" dal partner"}`,"ci","c"):row("ric","Richiesta inviata","sq","d")}
-    ${c.tipo==="Diretto"?row("sol","Sollecito inviato","di","c",!b.ric||!ms.length&&!b.sol):""}
+    ${c.tipo==="Diretto"?row("sol","Sollecito inviato","di","d",!b.ric||!ms.length&&!b.sol):""}
     <div class="srow ${b.ric&&!ms.length?"on":""}"><span class="dot"></span><span class="l">Modelli ricevuti</span><span class="na">${b.ric?(ms.length?ms.length+" mancanti":"tutti"):""}</span></div>
     <div class="mods">${MOD[k].map(([m,l])=>c.nd.includes(m)?`<span class="mod nd">${l}</span>`:`<button type="button" class="mod" data-got="${k}:${m}" aria-pressed="${b.got.includes(m)}" ${b.ric?"":"disabled"}>${l}</button>`).join("")}</div>
     <div class="srow ${verOk(c,k)?"on":""}"><span class="dot ci"></span><span class="l">Verifica svolta${nv?` <span class="na">· ${nv===1?"1 modello nuovo":nv+" modelli nuovi"} da vedere</span>`:""}</span><input type="checkbox" id="${k}_ver" data-b="${k}" data-k="ver" data-t="c" ${verOk(c,k)?"checked":""} ${!b.ric||ms.length===nd.length?"disabled":""} aria-label="Verifica svolta"></div>
@@ -1462,7 +1513,7 @@ function blockUI(c,k){
 function openDrawer(id){
   if(openId!==id){mailOpen=null;toast=null;}
   openId=id;const c=clients.find(x=>x.id===id),m=main(c);
-  $("dSigla").textContent=c.sigla;$("dTitle").textContent=c.nome;
+  $("dSigla").hidden=false;$("dSigla").textContent=c.sigla;$("dTitle").textContent=c.nome;
   const daRich=["770","ri"].filter(k=>need(c,k).length&&!c[k].ric), daSoll=["770","ri"].filter(k=>c[k].ric&&missing(c,k).length);
   $("dBody").innerHTML=`<div class="ro"><span>Prossima azione</span><span class="pill ${m.cls}">${m.txt}</span></div>
   <label class="chk"><input type="checkbox" id="att" data-att="1" ${c.attiva?"checked":""}> Dichiarativi attivi${c.tipo!=="Diretto"?" ("+c.tipo.toLowerCase()+")":""}</label>
@@ -1480,8 +1531,10 @@ const cur=()=>clients.find(x=>x.id===openId);
 async function genLett(c,k){const yy=String(X).slice(2),ri=blocchi(c).ri.nome.replace("Redditi/IRAP ","");
   const name=k==="770"?`Lettera_attest._770_${c.sigla}_${yy}.docx`:`Lettera_attest._Redditi_IRAP_${c.sigla}_${ri.slice(2)}.docx`;
   DOCGEN.save(await DOCGEN.fill(k==="770"?"lettera_770":"lettera_ri",{Y770:yy,YRI:ri,SOC:c.nome}),name);return name;}
-function refresh(t){render();openDrawer(openId);if(t&&t.id){const a=$(t.id);if(a)a.focus();}}
-$("dBody").addEventListener("change",ev=>{const t=ev.target,c=cur();if(!c)return;
+function refresh(t){render();if(openId==="sol"){openSol();return;}openDrawer(openId);if(t&&t.id){const a=$(t.id);if(a)a.focus();}}
+$("dBody").addEventListener("change",ev=>{const t=ev.target,c=cur();
+  if(t.dataset.sx){const id=+t.dataset.sx;t.checked?solOff.delete(id):solOff.add(id);solMsg="";openSol();return;}
+  if(!c)return;
   if(t.dataset.att)c.attiva=t.checked;
   else if(t.dataset.note)c.note=t.value;
   else if(t.dataset.c)c[t.dataset.c]=t.value;
@@ -1489,7 +1542,9 @@ $("dBody").addEventListener("change",ev=>{const t=ev.target,c=cur();if(!c)return
   else if(t.dataset.b&&t.dataset.k==="ver"){const b=c[t.dataset.b];if(t.checked){b.ver=b.ver||iso(TODAY);b.vok=[...b.got];}else{b.ver=null;b.vok=[];}}
   else if(t.dataset.b){const b=c[t.dataset.b];b[t.dataset.k]=t.dataset.t==="d"?(t.value||null):(t.checked?iso(TODAY):null);}
   refresh(t);});
-$("dBody").addEventListener("click",ev=>{const c=cur();if(!c)return;const b=ev.target.closest("button");if(!b||b.disabled)return;
+$("dBody").addEventListener("click",ev=>{const c=cur(),b=ev.target.closest("button");if(!b||b.disabled)return;
+  if(b.dataset.solgo){solGo();return;}
+  if(!c)return;
   if(b.dataset.got){const [k,m]=b.dataset.got.split(":");const g=c[k].got;g.includes(m)?c[k].got=g.filter(x=>x!==m):g.push(m);refresh();return;}
   if(b.dataset.mail){mailOpen=mailOpen===b.dataset.mail?null:b.dataset.mail;refresh();return;}
   if(b.dataset.out){OUTLOOK($("mailtxt").value);const ks=["770","ri"].filter(k=>mailOpen==="r"?need(c,k).length&&!c[k].ric:c[k].ric&&missing(c,k).length);ks.forEach(k=>{if(mailOpen==="r")c[k].ric=ISO();else if(!c[k].sol)c[k].sol=ISO();});mailOpen=null;refresh();return;}
@@ -3587,7 +3642,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="23/10/2026 10:19";
+const VERSIONE="26/10/2026 10:14";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
