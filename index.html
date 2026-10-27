@@ -1328,7 +1328,7 @@ APP.sec.controlli.parts=()=>{const a=clients.filter(c=>c.attiva);
 function SYNC(){clients.forEach(c=>{const a=A(c.sigla);if(!a)return;c.nome=a.nome;c.contatto=a.viaPartner?"":a.contatto;});}
 
 const PERSONE=["Nicolò","Giada","Andrea"];
-const REG={preavviso:30,richiestaTardi:20,sollecito:7,letteraGG:7,letteraSol:14,vicina:7}; // sollecito: giorni prima della scadenza di invio
+const REG={preavviso:30,richiestaTardi:20,sollecito:7,letteraGG:14,letteraSol:14,vicina:7}; // sollecito: giorni prima della scadenza di invio
 const DAY=864e5;
 const pad=n=>String(n).padStart(2,"0");
 const iso=x=>`${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`;
@@ -3679,7 +3679,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="27/10/2026 17:02";
+const VERSIONE="27/10/2026 17:04";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
