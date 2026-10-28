@@ -1260,7 +1260,9 @@ APP.sec.controlli.parts=()=>{const a=clients.filter(c=>c.attiva);
 #sec-dichiarativi .mk.di.on{background:var(--warn);border-color:var(--warn)}
 #sec-dichiarativi .mk.miss{border-color:var(--crit);background:var(--crit-soft)}
 #sec-dichiarativi .trk .miss-n{color:var(--crit);font-weight:600;font-family:var(--f-mono);font-size:12px}
-#sec-dichiarativi .due{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-left:6px}
+#sec-dichiarativi .due{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-left:4px}
+#sec-dichiarativi .trk .miss-n{display:inline-block;width:14px}
+#sec-dichiarativi .tcard .s .sigla.gia{opacity:.5}
 #sec-dichiarativi .due.near{color:var(--crit);font-weight:600}
 #sec-dichiarativi .srow{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;grid-column:1/-1;min-height:36px}
 #sec-dichiarativi .srow .dot{width:14px;height:14px;border:2px solid var(--line);margin-left:3px;border-radius:50%}
@@ -1390,7 +1392,7 @@ function main(c){
   if(a.some(x=>x.done)) return {txt:(bAct(c,"770")||{}).done?"770 completato":"Redditi/IRAP completato",cls:"ok"};
   return a[0]||{txt:"—",cls:"neu"};
 }
-const GROUPS=[["ric","Inviare richiesta"],["sol","Sollecitare modelli"],["ver","Verifiche da fare"],["esito","Comunicare esito e lettera"],["lett","Sollecitare lettera firmata"]];
+const GROUPS=[["ric","Inviare richiesta"],["ver","Verifiche da fare"],["sol","Sollecitare dichiarativi"],["esito","Comunicare esito e lettera"],["lett","Sollecitare lettere firmate"]];
 const ui={q:"",na:false,group:"",coll:""};
 const $=id=>root.querySelector('#'+CSS.escape(id));
 $("fColl").innerHTML=`<option value="">Tutti gli incaricati</option>`+PERSONE.map(p=>`<option>${p}</option>`).join("");
@@ -1401,27 +1403,30 @@ function track(c,k){
   const done=b.firm;
   return `<span class="trk" title="${bl.label} · scadenza ${dd(bl.scad)}">
     <span class="mk sq ${b.ric?"on":""}"></span>
-    <span class="mk ci ${b.ric?(ms?"miss":"on"):""}"></span>${b.ric&&ms?`<span class="miss-n">${ms}</span>`:""}
+    <span class="mk ci ${b.ric?(ms?"miss":"on"):""}"></span><span class="miss-n">${b.ric&&ms?ms:""}</span>
     <span class="mk di ${b.sol?"on":""}"></span>
     <span class="mk ci ${verOk(c,k)?"on":""}"></span>
     <span class="mk sq ${b.esito?"on":""}"></span>
     <span class="mk ci ${b.firm?"on":""}"></span>
     <span class="due ${!done&&toDue<=REG.vicina?"near":""}">${dd(bl.scad).slice(0,5)}</span></span>`;
 }
+const inG=(x,k)=>k==="sol"?x.c.attiva&&x.c.tipo==="Diretto"&&solKs(x.c).length>0:x.acts.some(a=>a.key===k);
 function render(){SYNC();APP.grow('dichiarativi',clients,MK,FLT,TUP);_render();APP.persist();}
 function _render(){
   $("seasonLbl").textContent=`Stagione ${X}/${String(X+1).slice(2)}`;
   const all=clients.map(c=>({c,acts:c.attiva?["770","ri"].map(k=>bAct(c,k)).filter(Boolean):[],m:main(c)}));
-  $("todo").innerHTML=GROUPS.map(([k,l])=>{const it=all.filter(x=>x.acts.some(a=>a.key===k));if(!it.length)return "";
-    const cls=it.some(x=>x.acts.some(a=>a.key===k&&a.cls==="crit"))?"crit":"warn";
+  // "Sollecitare dichiarativi": tutti i diretti con richiesta inviata e modelli mancanti, anche già sollecitati (sigla più chiara)
+  const solGia=c=>solKs(c).every(k=>c[k].sol);
+  $("todo").innerHTML=GROUPS.map(([k,l])=>{const it=all.filter(x=>inG(x,k));if(!it.length)return "";
+    const cls=k==="sol"?(it.some(x=>!solGia(x.c))?"crit":"warn"):it.some(x=>x.acts.some(a=>a.key===k&&a.cls==="crit"))?"crit":"warn";
     return `<button type="button" class="tcard ${cls}" data-g="${k}" aria-pressed="${ui.group===k}"><span class="h"><span>${l}</span><span class="n">${it.length}</span></span>
-      <span class="s">${it.map(x=>`<span class="sigla">${x.c.sigla}</span>`).join("")}</span></button>`;}).join("");
+      <span class="s">${it.map(x=>{const g=k==="sol"&&solGia(x.c);return `<span class="sigla${g?" gia":""}"${g?' title="già sollecitato"':""}>${x.c.sigla}</span>`;}).join("")}</span></button>`;}).join("");
   const act=clients.filter(c=>c.attiva);
   const cnt=(k,f)=>act.filter(c=>need(c,k).length&&f(c[k])).length, tot=k=>act.filter(c=>need(c,k).length).length;
   $("stats").innerHTML=[["770 verificati",cnt("770",b=>b.ver)+"/"+tot("770")],["Redditi/IRAP verificati",cnt("ri",b=>b.ver)+"/"+tot("ri")],
     ["Lettere 770 firmate",cnt("770",b=>b.firm)+"/"+tot("770")],["Lettere Redditi/IRAP firmate",cnt("ri",b=>b.firm)+"/"+tot("ri")]]
     .map(([l,n])=>`<div class="stat"><span class="n">${n}</span><span class="l">${l}</span></div>`).join("");
-  const list=all.filter(({c,acts})=>{if(!c.attiva&&!ui.na)return false;if(ui.group&&!acts.some(a=>a.key===ui.group))return false;
+  const list=all.filter(({c,acts})=>{if(!c.attiva&&!ui.na)return false;if(ui.group&&!inG({c,acts},ui.group))return false;
     if(ui.coll&&c.coll!==ui.coll)return false;if(ui.q&&!(`${c.nome} ${c.sigla}`.toLowerCase().includes(ui.q)))return false;return true;});
   $("rows").innerHTML=list.map(({c,m})=>`<tr data-id="${c.id}" tabindex="0">
     <td><span class="sigla">${c.sigla}</span></td><td>${esc(c.nome)}</td><td>${c.coll||'<span class="na">—</span>'}</td>
@@ -1547,18 +1552,18 @@ function blockUI(c,k){
 function openDrawer(id){
   if(openId!==id){mailOpen=null;toast=null;}
   openId=id;const c=clients.find(x=>x.id===id),m=main(c);
-  $("dSigla").hidden=false;$("dSigla").textContent=c.sigla;$("dTitle").textContent=c.nome;
+  $("dSigla").hidden=true;$("dTitle").textContent=c.nome;
   const daRich=["770","ri"].filter(k=>need(c,k).length&&!c[k].ric), daSoll=["770","ri"].filter(k=>c[k].ric&&missing(c,k).length);
-  $("dBody").innerHTML=`<div class="ro"><span>Prossima azione</span><span class="pill ${m.cls}">${m.txt}</span></div>
-  <label class="chk"><input type="checkbox" id="att" data-att="1" ${c.attiva?"checked":""}> Dichiarativi attivi${c.tipo!=="Diretto"?" ("+c.tipo.toLowerCase()+")":""}</label>
+  $("dBody").innerHTML=`<label class="chk"><input type="checkbox" id="att" data-att="1" ${c.attiva?"checked":""}> Dichiarativi attivi${c.tipo!=="Diretto"?" ("+c.tipo.toLowerCase()+")":""}</label>
+  <div class="ro"><span>Prossima azione</span><span class="pill ${m.cls}">${m.txt}</span></div>
+  <label class="f"><span>Note</span><textarea id="note" rows="2" data-note="1">${esc(c.note)}</textarea></label>
   ${c.attiva?`<fieldset><legend>Cliente</legend>
     <label class="f"><span>Incaricato verifiche</span><select id="coll" data-c="coll">${["",...PERSONE].map(p=>`<option ${c.coll===p?"selected":""}>${p}</option>`).join("")}</select></label>
     ${c.tipo!=="Diretto"?`<label class="f"><span>Richieste fatte da</span><input type="text" id="richDa" data-c="richDa" value="${esc(c.richDa||"")}" placeholder="${esc(((typeof A==="function"&&A(c.sigla))||{}).esterno||"Partner")}"></label>`:""}
     <div class="f"><span class="na">Modelli non dovuti</span><div class="prof" style="grid-template-columns:1fr">${[...MOD["770"],...MOD.ri].map(([mm,l])=>`<label class="chk"><input type="checkbox" id="nd_${mm}" data-nd="${mm}" ${c.nd.includes(mm)?"checked":""}> ${l}</label>`).join("")}</div></div>
     <div class="row2">${daRich.length&&c.tipo==="Diretto"?`<button type="button" class="btn" data-mail="r">Mail richiesta${daRich.length===1?(daRich[0]==="770"?" 770":" Redditi/IRAP"):""}</button>`:""}${daSoll.length&&c.tipo==="Diretto"?`<button type="button" class="btn ghost" data-mail="s">Mail sollecito</button>`:""}</div>
     ${mailOpen?`<div class="mailbox"><textarea id="mailtxt" readonly>${esc(mailText(c,mailOpen==="r"?daRich:daSoll,mailOpen==="s"))}</textarea><div class="row2"><button type="button" class="btn" data-out="1">Apri in Outlook</button><button type="button" class="btn ghost" data-copy="1">Copia testo</button><span class="na" id="copied"></span></div></div>`:""}
-  </fieldset>${blockUI(c,"770")}${blockUI(c,"ri")}`:""}
-  <label class="f"><span>Note</span><textarea id="note" rows="2" data-note="1">${esc(c.note)}</textarea></label>`;
+  </fieldset>${blockUI(c,"770")}${blockUI(c,"ri")}`:""}`;
   $("drawerBox").hidden=false;
 }
 const cur=()=>clients.find(x=>x.id===openId);
@@ -3679,7 +3684,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="27/10/2026 17:04";
+const VERSIONE="28/10/2026 10:45";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
