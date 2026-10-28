@@ -3562,6 +3562,28 @@ APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(i
 #sec-cruscotto .exf2{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px}
 #sec-cruscotto .x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;border-radius:6px;height:30px}
 #sec-cruscotto .x:hover{background:var(--crit-soft);color:var(--crit)}
+/* espansione dell'elenco dei prossimi giorni */
+#sec-cruscotto .more{display:flex;justify-content:center;gap:8px;width:100%;padding:8px 12px;border:0;border-top:1px solid var(--line);background:var(--sunk);font:inherit;font-size:12.5px;font-weight:600;color:var(--accent);cursor:pointer}
+#sec-cruscotto .more:hover{filter:brightness(.97)}
+#sec-cruscotto .more span{font-weight:400;color:var(--muted)}
+#sec-cruscotto .items .none0{display:block;padding:10px 14px;font-size:13px;color:var(--muted)}
+/* scadenze fiscali compatte nella colonna di destra (dal 28/10/2026) */
+#sec-cruscotto .fhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+#sec-cruscotto .fhead h4{margin:0}
+#sec-cruscotto .fis{display:flex;flex-direction:column}
+#sec-cruscotto .fr{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:6px;margin:0 -6px;border-radius:6px;font-size:12.5px}
+#sec-cruscotto .fr .dt{font-family:var(--f-mono);font-size:12px}
+#sec-cruscotto .fr .nm{min-width:0;line-height:1.3}
+#sec-cruscotto .fr .nm small{display:block;color:var(--muted);font-size:11.5px;font-weight:400}
+#sec-cruscotto .fr .w{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);white-space:nowrap}
+#sec-cruscotto .fr.next{background:var(--accent-soft)}
+#sec-cruscotto .fr.next .nm{font-weight:600}
+#sec-cruscotto .fr.next .w{color:var(--accent);font-weight:600}
+#sec-cruscotto .fr.soon .w{color:var(--warn);font-weight:600}
+#sec-cruscotto .fr.past{color:var(--muted)}
+#sec-cruscotto .fr.past .w{color:var(--ok)}
+#sec-cruscotto .fr .chipx{margin-left:5px}
+#sec-cruscotto .fy{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:6px 0 2px;border-top:1px solid var(--line);margin-top:4px}
 @media (max-width:620px){#sec-cruscotto .sct{grid-template-columns:auto minmax(0,1fr) auto}#sec-cruscotto .sct .r>span.mcol{display:none}#sec-cruscotto .exf2{grid-template-columns:1fr}}
 @media (max-width:860px){#sec-cruscotto .agenda{grid-template-columns:1fr}}
 @media (max-width:520px){#sec-cruscotto .item{grid-template-columns:4px 58px 14px minmax(0,1fr);gap:8px}#sec-cruscotto .item .r{grid-column:4}}
@@ -3575,6 +3597,7 @@ APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(i
     <aside class="side">
       <div class="box"><h4>Avanzamento</h4><div id="cProg"></div></div>
       <div class="box"><h4>Collaboratori</h4><div id="cWho"></div></div>
+      <div class="box"><div class="fhead"><h4>Scadenze fiscali</h4><button type="button" class="linkb" id="exOpen">Proroghe</button></div><div class="fis" id="cFis"></div></div>
     </aside>
   </div>
 </div>
@@ -3589,7 +3612,7 @@ APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(i
 <script>(function(root){
 const SECS=[["dichiarativi","Dichiarativi"],["inventari","Inventari"],["controlli","Controlli contabili"],["circolarizzazioni","Circolarizzazioni"],["general","General"],["audit","Audit"],["calendario","Calendario"],["ore","Ore"]];
 const PERSONE=["Nicolò","Giada","Andrea"],SYM={d:"□",s:"○",r:"◆",o:"◷",a:"▸"},SYMT={d:"data",s:"spunta",r:"sollecito",o:"ore",a:"appuntamento"};
-const DAY=864e5,SETT=7,PROSSIME=10;
+const DAY=864e5,SETT=7,VICINI=3,PROSSIME=10;let more=false,fPast=false;
 const pad=n=>String(n).padStart(2,"0");
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const t0=new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate());
@@ -3621,7 +3644,8 @@ function render(){
   const {T,P}=collect();
   const cur=T.filter(t=>!t.fut),fut=T.filter(t=>t.fut).sort(ord);
   const week=t=>t.fut&&t.n<=SETT;
-  const cnt=s=>T.filter(t=>(!t.fut||week(t))&&(!s||t.s===s)).length;
+  const near=t=>t.fut&&t.n<=VICINI;
+  const cnt=s=>T.filter(t=>(!t.fut||near(t))&&(!s||t.s===s)).length;
   if(sec&&!(sec in P))sec="";
   root.querySelector("#cFilt").innerHTML=[["","Tutte"],...SECS].map(([k,l])=>`<button type="button" class="fp" data-f="${k}" aria-pressed="${sec===k}">${l}<span class="n">${cnt(k)}</span></button>`).join("");
 
@@ -3632,13 +3656,17 @@ function render(){
     <span class="sym" title="${SYMT[t.sym]||""}">${SYM[t.sym]||""}</span>
     <span class="what"><b>${esc(t.txt)}</b><span>${t.sigla?`<span class="sigla">${esc(t.sigla)}</span> `:""}${esc(t.nome)}</span></span>
     <span class="r">${sec?"":`<span class="secchip">${name(t.s)}</span>`}${t.who?`<span class="ini" title="${esc(t.who)}">${esc(t.who[0])}</span>`:""}</span></button>`;
-  const grp=(cls,title,arr,extra)=>arr.length?`<div class="grp ${cls}"><h3>${title} <span class="n">${arr.length}</span>${extra||""}</h3><div class="items">${arr.map(row).join("")}</div></div>`:"";
-  const fine=new Date(t0.getTime()+SETT*DAY);
+  const grp=(cls,title,arr,extra,foot)=>arr.length||foot?`<div class="grp ${cls}"><h3>${title} <span class="n">${arr.length}</span>${extra||""}</h3><div class="items">${arr.length?arr.map(row).join(""):`<span class="none0">Nessuna scadenza.</span>`}${foot||""}</div></div>`:"";
+  const fine=new Date(t0.getFullYear(),t0.getMonth(),t0.getDate()+SETT),fine3=new Date(t0.getFullYear(),t0.getMonth(),t0.getDate()+VICINI);
   let h=grp("crit","Subito",sub)+grp("warn","Da fare",dafare);
-  if(wk.length)h+=grp("","Questa settimana",wk,`<em>fino al ${dm(fine)}</em>`);
+  // prossimi 3 giorni, con la possibilità di aprire il resto della settimana
+  if(wk.length){const nr=wk.filter(near),rest=wk.filter(t=>!near(t));if(!rest.length)more=false;
+    const foot=rest.length?`<button type="button" class="more" id="cMore">${more?"Mostra meno":`Mostra altre ${rest.length}`} <span>${more?`solo fino al ${dm(fine3)}`:`fino al ${dm(fine)}`}</span></button>`:"";
+    h+=grp("",more?"Questa settimana":"Prossimi 3 giorni",more?wk:nr,`<em>fino al ${dm(more?fine:fine3)}</em>`,foot);}
   else{h+=`<div class="empty">Nessuna scadenza fino al ${dm(fine)}.</div>`;h+=grp("","Prossime scadenze",oltre.slice(0,PROSSIME));}
-  h+=fiscali();
   root.querySelector("#cList").innerHTML=h;
+  root.querySelector("#cFis").innerHTML=fiscali();
+  const np=SCAD.proroghe().length;root.querySelector("#exOpen").textContent=np?`Proroghe (${np})`:"Proroghe";
 
   root.querySelector("#cProg").innerHTML=SECS.filter(([s])=>P[s]).map(([s,l])=>{const [d,tot]=P[s],cr=T.filter(t=>t.s===s&&!t.fut&&t.cls==="crit").length;
     return `<button type="button" class="prow" data-f="${s}" aria-pressed="${sec===s}"><span class="t">${l}</span><span class="c">${cr?`<b>${cr} subito</b> · `:""}${d}/${tot}</span>
@@ -3651,6 +3679,8 @@ function render(){
 }
 
 root.addEventListener("click",e=>{
+  if(e.target.closest("#cMore")){more=!more;render();return;}
+  if(e.target.closest("#cPast")){fPast=!fPast;render();return;}
   if(e.target.closest("#exOpen")){exRender();root.querySelector("#exBox").hidden=false;return;}
   const f=e.target.closest("[data-f]");
   if(f){sec=f.classList.contains("prow")&&sec===f.dataset.f?"":f.dataset.f;try{localStorage.setItem("revisione_crus_sec",sec);}catch(x){}render();return;}
@@ -3663,14 +3693,16 @@ const X0=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
 const d8=d=>{const s=SCAD.dd(d);return s.slice(0,6)+s.slice(8);};
 const MESIC=["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 function fiscali(){
-  const L=SCAD.stagione(X0,APP.ana);const nx=L.find(s=>s.d>=t0),nxt=nx?+nx.d:null;let mk="";
-  const rows=L.map(s=>{const m=MESIC[s.d.getMonth()]+" "+String(s.d.getFullYear()).slice(2),sm=m!==mk;mk=m;const n=gg(s.d),past=n<0;
-    return `<div class="r ${past?"past":+s.d===nxt?"next":n<=30?"soon":""}"><span class="mcol"><span class="m">${sm?m:""}</span></span>
-      <span><span class="dt">${d8(s.d)}${s.pro?` <s>${d8(s.ord)}</s>`:""}</span></span>
-      <span><span class="nm">${esc(s.nome)}${s.pro?`<span class="chipx">prorogata</span>`:""}</span><span class="rf">${esc(s.sub)}${s.pro&&s.nota?" · "+esc(s.nota):""}${!s.pro&&+s.ord!==+s.raw?` · slitta dal ${d8(s.raw).slice(0,5)}`:""}</span></span>
-      <span><span class="w">${past?"✓ scaduta":n===0?"oggi":`tra ${n} gg`}</span></span></div>`;}).join("");
-  const np=SCAD.proroghe().length;
-  return `<div class="grp"><h3 style="justify-content:space-between"><span>Scadenze fiscali <em>stagione ${X0}/${String(X0+1).slice(2)}</em></span><button type="button" class="linkb" id="exOpen">${np?`Proroghe (${np})`:"Proroghe"}</button></h3><div class="items sct">${rows}</div></div>`;}
+  const L=SCAD.stagione(X0,APP.ana),nx=L.find(s=>s.d>=t0),nxt=nx?+nx.d:null,y0=t0.getFullYear();let yr=y0;
+  const corto=x=>String(x).replace(/trimestre/,"trim.").replace(/^esercizi al/,"es. al");
+  const fr=s=>{const n=gg(s.d),past=n<0,y=s.d.getFullYear(),hy=!past&&y!==yr;if(!past)yr=y;
+    const tit=s.pro?`prorogata dal ${SCAD.dd(s.ord)}`:+s.ord!==+s.raw?`slitta dal ${SCAD.dd(s.raw)}`:"";
+    return `${hy?`<div class="fy">${y}</div>`:""}<div class="fr ${past?"past":+s.d===nxt?"next":n<=30?"soon":""}"${tit?` title="${tit}"`:""}><span class="dt">${dm(s.d)}</span>
+      <span class="nm">${esc(corto(s.nome))}${s.pro?`<span class="chipx">prorogata</span>`:""}<small>${esc(corto(s.sub))}${s.pro&&s.nota?" · "+esc(s.nota):""}</small></span>
+      <span class="w">${past?"✓":n===0?"oggi":`${n} gg`}</span></div>`;};
+  const P=L.filter(s=>gg(s.d)<0),F=L.filter(s=>gg(s.d)>=0);
+  return (fPast?P.map(fr).join(""):"")+F.map(fr).join("")+(F.length||P.length?"":`<span class="none">Nessuna scadenza.</span>`)
+    +(P.length?`<button type="button" class="linkb" id="cPast" style="align-self:flex-start;margin-top:6px">${fPast?"Nascondi scadute":`Mostra scadute (${P.length})`}</button>`:"");}
 // ---- pannello proroghe ----
 function exRender(){const L=SCAD.stagione(X0,APP.ana),P=SCAD.proroghe();
   root.querySelector("#exBody").innerHTML=`<span class="na">Le scadenze si calcolano da sole ogni anno e slittano al primo giorno lavorativo. Qui inserisci solo le proroghe: la nuova data vale in tutto il gestionale (cruscotto, Dichiarativi, Controlli contabili).</span>
@@ -3696,7 +3728,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="28/10/2026 11:50";
+const VERSIONE="28/10/2026 13:00";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
