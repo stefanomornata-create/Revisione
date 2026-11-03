@@ -1304,7 +1304,7 @@ APP.sec.controlli.parts=()=>{const a=clients.filter(c=>c.attiva);
     <input type="search" id="q" placeholder="Cerca">
     <select id="fColl" aria-label="Incaricato verifiche"></select>
     <label class="chk"><input type="checkbox" id="fNa"> Mostra esclusi</label>
-    <button type="button" class="btn ghost" id="solBtn" style="margin-left:auto" hidden>Solleciti</button>
+    <span style="margin-left:auto;display:flex;gap:8px;align-items:center"><button type="button" class="btn ghost" id="solBtn" hidden>Solleciti</button><button type="button" class="btn ghost" id="chiBtn">Chiudi stagione</button></span>
   </div>
   <div class="tablebox">
     <table>
@@ -1368,6 +1368,20 @@ const missing=(c,k)=>need(c,k).filter(([m])=>!c[k].got.includes(m));
 // modelli arrivati dopo l'ultima verifica (vok = modelli visti; dati vecchi senza vok: tutti visti)
 const unver=(c,k)=>{const b=c[k];if(!b.ver)return [];const v=b.vok||b.got;return need(c,k).filter(([m])=>b.got.includes(m)&&!v.includes(m));};
 const verOk=(c,k)=>!!c[k].ver&&!unver(c,k).length;
+// stagione chiusa (03/11/2026): spegne gli avvisi dei Dichiarativi in tutta l'app, la sezione resta modificabile.
+// Record "~sez" nel bucket della stagione (s[stagione].dichiarativi), non riportato alla stagione successiva.
+const sezRec=()=>{const y=APP.data.s[APP.SY]||(APP.data.s[APP.SY]={}),b=y.dichiarativi||(y.dichiarativi={});return b["~sez"]||(b["~sez"]={_f:{}});};
+const chiusa=()=>{const y=APP.data.s[APP.SY]||{},r=(y.dichiarativi||{})["~sez"];return r&&r.chiusa||"";};
+function setChiusa(v){const r=sezRec();r._f=r._f||{};r.chiusa=v;r._f.chiusa=Date.now();APP.changed();render();}
+const MCORTO={dip:"770 dip.",aut:"770 aut.",cap:"770 cap.",red:"Redditi",irap:"IRAP"};
+function manca(c){const out=[];
+  ["770","ri"].forEach(k=>{if(!need(c,k).length)return;const ms=missing(c,k).map(([m])=>m);
+    if(ms.length){if(k==="770"&&ms.length===3)out.push("770");else if(k==="ri"&&ms.length===2)out.push("Redditi/IRAP");else ms.forEach(m=>out.push(MCORTO[m]));}
+    else if(!c[k].firm)out.push(k==="770"?"lettera 770":"lettera Redditi/IRAP");});
+  return out;}
+// prossima azione da mostrare: a stagione chiusa grigia, con i modelli o le lettere che mancano
+function shown(c){const m=main(c);if(!chiusa()||!c.attiva)return m;const L=manca(c);
+  return L.length?{txt:"Manca: "+L.join(", "),cls:"neu"}:{txt:m.txt,cls:m.cls==="ok"?"ok":"neu"};}
 // gerarchia (28/10/2026): p = priorità nella "Prossima azione". Fino alla scadenza di invio tutto ciò che riguarda i modelli
 // (richiesta, sollecito, verifica, esito, attesa dei mancanti) viene prima della lettera firmata, che può arrivare anche dopo.
 const ddm=s=>s.slice(8,10)+"/"+s.slice(5,7);
@@ -1418,16 +1432,17 @@ function track(c,k){
     <span class="mk ci ${verOk(c,k)?"on":""}"></span>
     <span class="mk sq ${b.esito?"on":""}"></span>
     <span class="mk ci ${b.firm?"on":""}"></span>
-    <span class="due ${!done&&toDue<=REG.vicina?"near":""}">${dd(bl.scad).slice(0,5)}</span></span>`;
+    <span class="due ${!done&&!chiusa()&&toDue<=REG.vicina?"near":""}">${dd(bl.scad).slice(0,5)}</span></span>`;
 }
 const inG=(x,k)=>k==="sol"?x.c.attiva&&x.c.tipo==="Diretto"&&solKs(x.c).length>0:k==="lett"?x.c.attiva&&["770","ri"].some(kk=>need(x.c,kk).length&&lettDue(x.c[kk])):x.acts.some(a=>a.key===k);
 function render(){SYNC();APP.grow('dichiarativi',clients,MK,FLT,TUP);_render();APP.persist();}
 function _render(){
   $("seasonLbl").textContent=`Stagione ${X}/${String(X+1).slice(2)}`;
-  const all=clients.map(c=>({c,acts:c.attiva?["770","ri"].map(k=>bAct(c,k)).filter(Boolean):[],m:main(c)}));
+  const all=clients.map(c=>({c,acts:c.attiva?["770","ri"].map(k=>bAct(c,k)).filter(Boolean):[],m:shown(c)}));
+  if(chiusa()&&ui.group)ui.group="";
   // "Sollecitare dichiarativi": tutti i diretti con richiesta inviata e modelli mancanti, anche già sollecitati (sigla più chiara)
   const solGia=c=>solKs(c).every(k=>c[k].sol);
-  $("todo").innerHTML=GROUPS.map(([k,l])=>{const it=all.filter(x=>inG(x,k));if(!it.length)return "";
+  $("todo").innerHTML=chiusa()?"":GROUPS.map(([k,l])=>{const it=all.filter(x=>inG(x,k));if(!it.length)return "";
     const cls=k==="sol"?(it.some(x=>!solGia(x.c))?"crit":"warn"):it.some(x=>x.acts.some(a=>a.key===k&&a.cls==="crit"))?"crit":"warn";
     return `<button type="button" class="tcard ${cls}" data-g="${k}" aria-pressed="${ui.group===k}"><span class="h"><span>${l}</span><span class="n">${it.length}</span></span>
       <span class="s">${it.map(x=>{const g=k==="sol"&&solGia(x.c);return `<span class="sigla${g?" gia":""}"${g?' title="già sollecitato"':""}>${x.c.sigla}</span>`;}).join("")}</span></button>`;}).join("");
@@ -1444,7 +1459,8 @@ function _render(){
     ${c.attiva?`<td>${track(c,"770")}</td><td>${track(c,"ri")}</td>`:`<td colspan="2" class="na">${c.tipo}</td>`}</tr>`).join("")
     ||`<tr><td colspan="6" class="na" style="padding:20px">Nessun cliente.</td></tr>`;
   const sb=$("solBtn"),sn=solCands().filter(c=>!solDate(c)).length+letCands().filter(letDue).length;
-  sb.hidden=!solCands().length&&!letCands().length;sb.textContent=sn?`Solleciti (${sn})`:"Solleciti";
+  sb.hidden=!!chiusa()||!solCands().length&&!letCands().length;sb.textContent=sn?`Solleciti (${sn})`:"Solleciti";
+  const cb=$("chiBtn"),ch=chiusa();cb.textContent=ch?`Stagione chiusa il ${ddm(ch)}`:"Chiudi stagione";cb.title=ch?"Riapri gli avvisi":"Spegne gli avvisi dei dichiarativi";
 }
 // ---- solleciti in blocco (solo clienti diretti) ----
 // m: modelli mancanti (richiesta inviata); l: lettere di attestazione inviate con l'esito e non ancora firmate
@@ -1515,6 +1531,8 @@ async function solGo(){
 }
 $("solBtn").onclick=()=>{mailOpen=null;toast=null;solMsg="";openId="sol";
   solOff=new Set([...solCands().filter(c=>solDate(c)).map(c=>"m:"+c.id),...letCands().filter(c=>!letDue(c)).map(c=>"l:"+c.id)]);openSol();};
+$("chiBtn").onclick=()=>{if(chiusa()){if(confirm("Riaprire gli avvisi dei dichiarativi?"))setChiusa("");}
+  else if(confirm("Chiudere la stagione dei dichiarativi?\nGli avvisi si spengono in tutta l'app; la sezione resta modificabile."))setChiusa(ISO());};
 $("todo").onclick=e=>{const b=e.target.closest("[data-g]");if(!b)return;ui.group=ui.group===b.dataset.g?"":b.dataset.g;render();};
 $("q").oninput=e=>{ui.q=e.target.value.toLowerCase();render();};
 $("fColl").onchange=e=>{ui.coll=e.target.value;render();};
@@ -1561,7 +1579,7 @@ function blockUI(c,k){
 }
 function openDrawer(id){
   if(openId!==id){mailOpen=null;toast=null;}
-  openId=id;const c=clients.find(x=>x.id===id),m=main(c);
+  openId=id;const c=clients.find(x=>x.id===id),m=shown(c);
   $("dSigla").hidden=true;$("dTitle").textContent=c.nome;
   const daRich=["770","ri"].filter(k=>need(c,k).length&&!c[k].ric), daSoll=["770","ri"].filter(k=>c[k].ric&&missing(c,k).length);
   $("dBody").innerHTML=`<label class="chk"><input type="checkbox" id="att" data-att="1" ${c.attiva?"checked":""}> Dichiarativi attivi${c.tipo!=="Diretto"?" ("+c.tipo.toLowerCase()+")":""}</label>
@@ -1613,7 +1631,8 @@ APP.sec['dichiarativi']={render:()=>render()};
 APP.sec.dichiarativi.agenda=()=>{const T=[],plus=(s,n)=>new Date(pd(s).getTime()+n*DAY),less=(x,n)=>new Date(x.getTime()-n*DAY);
   const lDue=b=>b.lsol?plus(b.lsol,REG.letteraSol):plus(b.esito,REG.letteraGG);
   const act=clients.filter(c=>c.attiva);let done=0;
-  act.forEach(c=>{if(main(c).txt==="Completati")done++;
+  const off=!!chiusa();
+  act.forEach(c=>{if(main(c).txt==="Completati")done++;if(off)return;
     const add=o=>T.push(Object.assign({id:c.id,sigla:c.sigla,nome:c.nome,who:""},o));
     ["770","ri"].forEach(k=>{const a=bAct(c,k);if(!a||a.done)return;const b=c[k],bl=blocchi(c)[k],lbl=k==="770"?"770":"Redditi/IRAP";
       if(a.key==="att"){const cr=a.cls==="crit";add(Object.assign({txt:a.txt,sym:"r",d:less(bl.scad,REG.attesa)},cr?{cls:"crit"}:{fut:1}));return;}
@@ -3728,7 +3747,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="28/10/2026 13:00";
+const VERSIONE="03/11/2026 16:30";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
