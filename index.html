@@ -3113,8 +3113,6 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-calopen]
       </div>
       <div class="box"><h4>Report annuale</h4>
         <div class="rep"><select id="oRepY" aria-label="Anno del report"></select><button type="button" class="btn" id="oRep">Scarica Excel</button></div>
-        <div class="rep"><button type="button" class="linkb" id="oImpB">Importa timesheet Excel</button></div>
-        <input type="file" id="oImp" accept=".xlsx,.xls" hidden>
       </div>
     </aside>
   </div>
@@ -3147,7 +3145,6 @@ const ATT=[
   {k:"a:ferie",nome:"FERIE - PERMESSI - EX-FESTIVITA'",lbl:"Ferie, permessi, ex festività"},
   {k:"a:fest",nome:"FESTIVITA'",lbl:"Festività"},
   {k:"a:tni",nome:"TEMPI NON IMPUTABILI",lbl:"Tempi non imputabili"}];
-const ATT_SKIP=["PREDISPOSIZIONE TOOLS DI LAVORO","RECOGNITA LAB"];
 
 // ---- festività nazionali: niente avviso ----
 function pasqua(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(y,mo-1,da);}
@@ -3268,7 +3265,6 @@ $("oDate").addEventListener("change",()=>{const v=$("oDate").value;if(v&&+v.slic
 const _lib={};
 function lib(url,g){return window[g]?Promise.resolve():(_lib[url]||(_lib[url]=new Promise((ok,ko)=>{const s=document.createElement("script");s.src=url;s.onload=ok;s.onerror=()=>{delete _lib[url];ko(new Error("libreria non raggiungibile"));};document.head.appendChild(s);})));}
 const EXCELJS="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
-const SHEETJS="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
 function colL(n){let s="";while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}return s;}
 
 // ---- report annuale: struttura del timesheet, senza colori; attività e poi clienti con ore in ordine alfabetico ----
@@ -3279,6 +3275,8 @@ async function buildReport(year){
   const H=Array.from({length:12},()=>({}));const used=new Set();
   for(const dk in D.ore){if(+dk.slice(0,4)!==year)continue;const m=+dk.slice(5,7)-1,g=+dk.slice(8,10),o=vals(dk);
     for(const c in o){(H[m][c]||(H[m][c]={}))[g]=o[c];used.add(c);}}
+  // tutti i clienti attivi dell'anagrafica (anche a zero ore) + chiunque abbia ore nell'anno (disattivati, esterni)
+  APP.ana.forEach(c=>{if(c.uid&&(c.nome||c.sigla)&&c.attivo!==false)used.add("c:"+c.uid);});
   const cl=[...used].filter(k=>!k.startsWith("a:")).map(k=>byK(k)||{k,nome:"(cliente eliminato)"}).sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
   const rowsDef=[...ATT.map(a=>({c:a,att:1})),...cl.map((c,i)=>({c,first:i===0}))];
   const R0=3,RL=R0+rowsDef.length-1,ROW={};rowsDef.forEach((r,i)=>ROW[r.c.k]=R0+i);
@@ -3323,30 +3321,6 @@ $("oRep").onclick=async()=>{const y=+$("oRepY").value,b=$("oRep");b.disabled=tru
   }catch(e){toast("Report non riuscito: "+e.message);}
   b.disabled=false;b.textContent="Scarica Excel";};
 
-// ---- importazione del timesheet Excel: sostituisce le ore di quell'anno, aggiunge solo i clienti con ore ----
-const norm=s=>String(s||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
-$("oImpB").onclick=()=>$("oImp").click();
-$("oImp").onchange=async()=>{const f=$("oImp").files[0];$("oImp").value="";if(!f)return;
-  const btn=$("oImpB");btn.disabled=true;
-  try{await lib(SHEETJS,"XLSX");const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
-    if(!MESI.some(m=>wb.Sheets[m]))throw new Error("il file non ha i fogli dei mesi");
-    const ym=f.name.match(/20\d\d/),year=ym?+ym[0]:TODAY.getFullYear(),now=Date.now();
-    const map={};ATT.forEach(a=>map[norm(a.nome)]=a.k);clienti().forEach(c=>{map[norm(c.nome)]=c.k;});
-    const skip=new Set(ATT_SKIP.map(norm));
-    const nuovo={};let n=0,nuovi=0;
-    MESI.forEach((mn,m)=>{const ws=wb.Sheets[mn];if(!ws)return;const nd=new Date(year,m+1,0).getDate();
-      for(let r=3;r<=500;r++){const a=(ws["A"+r]||{}).v;if(!a)continue;const na=norm(a);if(na==="ORERECOGNITA")break;if(skip.has(na))continue;
-        const vv=[];for(let g=1;g<=nd;g++){const v=(ws[colL(2+g)+r]||{}).v;if(typeof v==="number"&&v>0)vv.push([g,v]);}
-        if(!vv.length)continue;
-        let k=map[na];if(!k){const id=now.toString(36)+"_"+(nuovi++);D.oreX[id]={nome:String(a).trim(),_f:{nome:now}};k="x:"+id;map[na]=k;}
-        vv.forEach(([g,v])=>{const dk=`${year}-${pad(m+1)}-${pad(g)}`;(nuovo[dk]||(nuovo[dk]={}))[k]=v;n+=v;});}});
-    // le ore già presenti in quell'anno vengono sostituite dal file
-    for(const dk in D.ore)if(+dk.slice(0,4)===year)for(const c in vals(dk))setH(dk,c,0,now);
-    for(const dk in nuovo)for(const c in nuovo[dk])setH(dk,c,nuovo[dk][c],now);
-    const last=Object.keys(nuovo).sort().pop();if(last)sel=pd(last);
-    APP.changed();render();toast(`Importate ${fh(n)} ore su ${Object.keys(nuovo).length} giorni (${year})${nuovi?` · ${nuovi} clienti aggiunti`:""}`);
-  }catch(e){toast("Importazione non riuscita: "+e.message);}
-  btn.disabled=false;};
 
 // ===================== trasferte e note spese =====================
 // dati: D.trips[id] = {d,c,mot,km,link,ped,pra,tar,del}; D.notes[aaaa-mm] = {sent,paid,pay}; D.pays[id] = {d,imp,notes}; D.tset.main = {tar,tarY,carb,marca,mod,to1,to2}
@@ -3747,7 +3721,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="03/11/2026 16:30";
+const VERSIONE="11/11/2026 10:00";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
