@@ -677,7 +677,7 @@ let SEEDED=0;function SYNC(){clients.forEach(c=>{const a=A(c.sigla);if(!a)return
   if(!SEEDED&&c.bdv&&!e.bdv)e.bdv=c.bdv;c.bdv=e.bdv||"";});SEEDED=1;APP.circ=clients;}
 
 const PERSONE=["Nicolò","Giada","Andrea"];
-const REGOLE={avvioPreavviso:60,avvioTermine:45,sollecitoFirmate:15,sollecitoTerzi:15,sollecitoPartitari:10};
+const REGOLE={avvioDopo:1,avvioTermine:15,sollecitoFirmate:15,sollecitoTerzi:15,sollecitoPartitari:10};
 // tipo: d = data, c = spunta, s = sollecito (spunta)
 const P1=[["inv","Invio file e format al cliente","d","inv"],["solF","Sollecito lettere firmate","s","solF"],["firm","Lettere firmate ricevute","c"],["pec","Invio PEC","d"],["sol","Sollecito","s"]];
 const P2=[["ric","Richiesta partitari","d","ric"],["part","Partitari ricevuti","c"],["sel","Selezione statistica","c"],["inv","Invio file e format al cliente","d","inv"],["solF","Sollecito lettere firmate","s","solF"],["firm","Lettere firmate ricevute","c"],["pec","Invio PEC","d"],["sol","Sollecito","s"]];
@@ -720,8 +720,8 @@ function phase(p,lbl,first){ // passaggi comuni dall'invio file in poi
 function action(c){
   if(!c.attiva) return {key:"na",txt:"Esclusa",cls:"neu"};
   const a=c.p1,b=c.p2,toClose=Math.round((closing(c)-TODAY)/DAY);
-  if(!a.inv){ if(toClose<=REGOLE.avvioTermine) return {key:"avvio",txt:"Avviare I parte",cls:"crit"};
-    if(toClose<=REGOLE.avvioPreavviso) return {key:"avvio",txt:"Avviare I parte",cls:"warn"};
+  if(!a.inv){ if(-toClose>=REGOLE.avvioTermine) return {key:"avvio",txt:"Avviare I parte",cls:"crit"};
+    if(-toClose>=REGOLE.avvioDopo) return {key:"avvio",txt:"Avviare I parte",cls:"warn"};
     return {key:"",txt:"In attesa",cls:"neu"};}
   const r1=phase(a,"I parte"); if(r1) return r1;
   if(c.noP2) return {key:"",txt:"Completata",cls:"ok"};
@@ -869,10 +869,10 @@ APP.sec.circolarizzazioni.agenda=()=>{const T=[],ds=v=>typeof v==="string"&&/^\d
       add({txt:x.key==="solFirm"?`Sollecitare lettere firmate ${pn}`:x.key==="viste"?`Risposte da vedere ${pn}`:x.txt,cls:x.cls,
         sym:{avvio:"d",solFirm:"r",pec:"d",viste:"s",solTerzi:"r",partitari:"d",solPart:"r",sel:"s",inv2:"d"}[x.key],
         who:["pec","viste","solTerzi"].includes(x.key)?p.inc:"",
-        d:{avvio:new Date(cl.getTime()-REGOLE.avvioTermine*DAY),solFirm:plus(p.inv,REGOLE.sollecitoFirmate),pec:ds(p.firm),viste:null,
+        d:{avvio:new Date(cl.getFullYear(),cl.getMonth(),cl.getDate()+REGOLE.avvioTermine),solFirm:plus(p.inv,REGOLE.sollecitoFirmate),pec:ds(p.firm),viste:null,
           solTerzi:plus(p.pec,REGOLE.sollecitoTerzi),partitari:ds(c.bdv),solPart:plus(b.ric,REGOLE.sollecitoPartitari),sel:ds(b.part),inv2:ds(b.sel)}[x.key]||null});return;}
     if(x.key==="na"||x.cls==="ok")return;
-    if(!a.inv)add({txt:"Avviare I parte",d:new Date(cl.getTime()-REGOLE.avvioPreavviso*DAY),sym:"d",fut:1});
+    if(!a.inv)add({txt:"Avviare I parte",d:new Date(cl.getFullYear(),cl.getMonth(),cl.getDate()+REGOLE.avvioDopo),sym:"d",fut:1});
     else if(p.inv&&!p.firm&&!p.solF)add({txt:`Sollecitare lettere firmate ${pn}`,d:plus(p.inv,REGOLE.sollecitoFirmate),sym:"r",fut:1});
     else if(p.pec&&!complete(p))add({txt:`Sollecitare terzi ${pn}`,d:plus(p.pec,REGOLE.sollecitoTerzi),sym:"r",fut:1,who:p.inc});
     else if(part==="p2"&&b.ric&&!b.part)add({txt:"Sollecitare partitari",d:plus(b.ric,REGOLE.sollecitoPartitari),sym:"r",fut:1});});
@@ -3496,6 +3496,7 @@ APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(i
 #sec-cruscotto .item.crit .d small{color:var(--crit);font-weight:600}
 #sec-cruscotto .item .sym{font-size:13px;color:var(--accent);text-align:center}
 #sec-cruscotto .item .what{min-width:0}
+#sec-cruscotto .item.sub{background:var(--sunk)}#sec-cruscotto .item.sub .what{padding-left:14px}#sec-cruscotto .item .tg{font-size:12px;color:var(--muted);width:14px;text-align:center}
 #sec-cruscotto .item.ap{background:var(--accent-soft)}#sec-cruscotto .item.ap:hover{filter:brightness(.97)}
 #sec-cruscotto .item .what b{font-weight:600;font-size:13.5px}
 #sec-cruscotto .item .what>span{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -3605,7 +3606,7 @@ APP.sec.ore={render:()=>render(),agenda,focus:id=>{if(/^\d{4}-\d\d-\d\d$/.test(i
 <script>(function(root){
 const SECS=[["dichiarativi","Dichiarativi"],["inventari","Inventari"],["controlli","Controlli contabili"],["circolarizzazioni","Circolarizzazioni"],["general","General"],["audit","Audit"],["calendario","Calendario"],["ore","Ore"]];
 const PERSONE=["Nicolò","Giada","Andrea"],SYM={d:"□",s:"○",r:"◆",o:"◷",a:"▸"},SYMT={d:"data",s:"spunta",r:"sollecito",o:"ore",a:"appuntamento"};
-const DAY=864e5,SETT=7,VICINI=3,PROSSIME=10;let more=false,fPast=false;
+const DAY=864e5,SETT=7,VICINI=3,PROSSIME=10;let more=false,fPast=false;const gOpen=new Set();
 const pad=n=>String(n).padStart(2,"0");
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const t0=new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate());
@@ -3631,7 +3632,8 @@ function when(t){
   else r=n<0?`da ${-n} gg`:n===0?"oggi":`entro ${n} gg`;
   return `<span class="d">${dm(t.d)}<small>${r}</small></span>`;
 }
-const ord=(a,b)=>(a.d?a.n:-1e4)-(b.d?b.n:-1e4)||a.sigla.localeCompare(b.sigla);
+// ordine cronologico: giorno (senza data = oggi), poi ora, poi stesso tipo di avviso vicino, poi sigla
+const ord=(a,b)=>(a.d?a.n:0)-(b.d?b.n:0)||(a.d&&b.d?a.d-b.d:0)||a.txt.localeCompare(b.txt,"it")||a.sigla.localeCompare(b.sigla);
 
 function render(){
   const {T,P}=collect();
@@ -3649,7 +3651,20 @@ function render(){
     <span class="sym" title="${SYMT[t.sym]||""}">${SYM[t.sym]||""}</span>
     <span class="what"><b>${esc(t.txt)}</b><span>${t.sigla?`<span class="sigla">${esc(t.sigla)}</span> `:""}${esc(t.nome)}</span></span>
     <span class="r">${sec?"":`<span class="secchip">${name(t.s)}</span>`}${t.who?`<span class="ini" title="${esc(t.who)}">${esc(t.who[0])}</span>`:""}</span></button>`;
-  const grp=(cls,title,arr,extra,foot)=>arr.length||foot?`<div class="grp ${cls}"><h3>${title} <span class="n">${arr.length}</span>${extra||""}</h3><div class="items">${arr.length?arr.map(row).join(""):`<span class="none0">Nessuna scadenza.</span>`}${foot||""}</div></div>`:"";
+  // avvisi dello stesso tipo (stessa sezione e testo) riuniti in una riga apribile, alla data più vecchia
+  const rows=(arr,lst)=>{const G={},out=[];
+    arr.forEach(t=>{if(t.s==="calendario"){out.push(t);return;}const k=lst+"|"+t.s+"|"+t.txt+"|"+(t.fut?"f":t.cls);
+      if(!G[k]){G[k]=[];out.push({k,L:G[k]});}G[k].push(t);});
+    return out.map(x=>{if(!x.L)return row(x);if(x.L.length===1)return row(x.L[0]);
+      const L=x.L,f=L[0],op=gOpen.has(x.k),hasS=L.some(t=>t.sigla),ws=[...new Set(L.map(t=>t.who))],who=ws.length===1?ws[0]:"";
+      const cls=f.fut?"":L.some(t=>t.cls==="crit")?"crit":f.cls;
+      const det=hasS?[...new Set(L.map(t=>t.sigla))].join(", "):L.map(t=>t.d?dm(t.d):"").join(", ");
+      return `<button type="button" class="item gtog ${cls}" data-g="${esc(x.k)}" aria-expanded="${op}"><span class="bar"></span>${when(f)}
+        <span class="sym" title="${SYMT[f.sym]||""}">${SYM[f.sym]||""}</span>
+        <span class="what"><b>${esc(f.txt)} · ${L.length} ${hasS?"clienti":"giorni"}</b><span>${esc(det)}</span></span>
+        <span class="r">${sec?"":`<span class="secchip">${name(f.s)}</span>`}${who?`<span class="ini" title="${esc(who)}">${esc(who[0])}</span>`:""}<span class="tg">${op?"▴":"▾"}</span></span></button>`
+        +(op?L.map(t=>row(t).replace('class="item go ','class="item go sub ')).join(""):"");}).join("");};
+  const grp=(cls,title,arr,extra,foot)=>arr.length||foot?`<div class="grp ${cls}"><h3>${title} <span class="n">${arr.length}</span>${extra||""}</h3><div class="items">${arr.length?rows(arr,cls):`<span class="none0">Nessuna scadenza.</span>`}${foot||""}</div></div>`:"";
   const fine=new Date(t0.getFullYear(),t0.getMonth(),t0.getDate()+SETT),fine3=new Date(t0.getFullYear(),t0.getMonth(),t0.getDate()+VICINI);
   let h=grp("crit","Subito",sub)+grp("warn","Da fare",dafare);
   // prossimi 3 giorni, con la possibilità di aprire il resto della settimana
@@ -3673,6 +3688,7 @@ function render(){
 
 root.addEventListener("click",e=>{
   if(e.target.closest("#cMore")){more=!more;render();return;}
+  const tg=e.target.closest(".gtog");if(tg){const k=tg.dataset.g;gOpen.has(k)?gOpen.delete(k):gOpen.add(k);render();return;}
   if(e.target.closest("#cPast")){fPast=!fPast;render();return;}
   if(e.target.closest("#exOpen")){exRender();root.querySelector("#exBox").hidden=false;return;}
   const f=e.target.closest("[data-f]");
@@ -3721,7 +3737,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="11/11/2026 10:00";
+const VERSIONE="12/11/2026 15:30";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
