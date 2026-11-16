@@ -1904,7 +1904,7 @@ APP.sec.general.parts=()=>{const a=clients.filter(c=>c.attiva);
 #sec-audit .ar{width:17px;height:19px;border-radius:3px;border:1.5px solid var(--line);font-family:var(--f-mono);font-size:10px;display:grid;place-items:center;color:var(--muted);background:transparent}
 #sec-audit .ar.s1{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 #sec-audit .ar.s2{background:var(--warn-soft);border-color:var(--warn);color:var(--warn);font-weight:600}
-#sec-audit .ar.s3{border-style:dotted;opacity:.35}
+#sec-audit .ar.s3{color:var(--muted);background:linear-gradient(to top right,transparent calc(50% - .75px),var(--muted) calc(50% - .75px),var(--muted) calc(50% + .75px),transparent calc(50% + .75px))}
 #sec-audit .prog{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
 #sec-audit .rq{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
 #sec-audit .rq.late{color:var(--crit);font-weight:600}
@@ -1936,7 +1936,6 @@ APP.sec.general.parts=()=>{const a=clients.filter(c=>c.attiva);
 #sec-audit .req.late input[type=date]{border-color:var(--crit)}
 #sec-audit .lnk{border:0;background:none;color:var(--accent);font:inherit;font-size:13px;cursor:pointer;padding:0;justify-self:start}
 #sec-audit .x{border:0;background:none;color:var(--muted);font-size:16px;cursor:pointer}
-#sec-audit .scope{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px 10px}
 @media (max-width:520px){#sec-audit .req{grid-template-columns:1fr auto auto}
 #sec-audit .req input[type=text]{grid-column:1/-1}
 #sec-audit .arow{grid-template-columns:26px 1fr}
@@ -1996,7 +1995,7 @@ const FLT=a=>true,TUP=a=>[a.sigla,a.nome,a.tipo];
 const CL=APP.ana.filter(a=>a.sigla&&a.attivo!==false&&FLT(a)).map(TUP);
 const SC_IND="CEFHLMPRSTU", SC_HOLD="DFHLMPUVZ", SC_COMM="CEFHLPRSTU";
 const EX={};
-// stato area: 0 da fare, 1 fatta, 2 da completare, 3 non applicabile
+// stato area: 0 da fare (nessun tasto), 1 Fatto, 2 WIP, 3 N/A
 const CM={};
 const MK=(([s,n,t],i)=>{const e=EX[s]||{};const sc=e.scope||AREE.map(a=>a[0]).join("");const st={},nt={};
   AREE.forEach(([k])=>{st[k]=sc.includes(k)?((e.done||"").includes(k)?1:0):3;});
@@ -2039,7 +2038,7 @@ function _render(){
   $("rows").innerHTML=list.map(({c,i})=>{const p=prog(c),last=c.req.filter(r=>r.d).sort((a,b)=>a.d<b.d?1:-1)[0];
     return `<tr data-id="${c.id}" tabindex="0"><td><span class="sigla">${c.sigla}</span></td><td>${esc(c.nome)}</td><td>${c.coll||'<span class="na">—</span>'}</td>
     <td><span class="pill ${i.cls}">${i.txt}</span></td>
-    ${c.attiva?`<td><span class="areas">${AREE.map(([k,l])=>{const s=eff(c,k);return `<span class="ar s${s}${c.cm[k]?" hasc":""}" title="${k} ${l} · ${["da fare","fatta","da completare","non applicabile"][s]}${c.nt[k]&&s===2?" · "+esc(c.nt[k]):""}${c.cm[k]?" · commento: "+esc(c.cm[k].slice(0,120))+(c.cm[k].length>120?"…":""):""}">${k}</span>`;}).join("")}</span></td>
+    ${c.attiva?`<td><span class="areas">${AREE.map(([k,l])=>{const s=eff(c,k);return `<span class="ar s${s}${c.cm[k]?" hasc":""}" title="${k} ${l} · ${["da fare","fatto","WIP","N/A"][s]}${c.nt[k]&&s===2?" · "+esc(c.nt[k]):""}${c.cm[k]?" · commento: "+esc(c.cm[k].slice(0,120))+(c.cm[k].length>120?"…":""):""}">${k}</span>`;}).join("")}</span></td>
     <td class="prog">${p.done}/${p.tot}</td>
     <td>${last?`<span class="rq ${!last.ok&&days(last.d)>ATTESA_GG?"late":""}">${dd(pd(last.d))}${last.ok?" ✓":""}</span>`:'<span class="na">—</span>'}</td>`:`<td colspan="3" class="na">${c.tipo}</td>`}</tr>`;}).join("")
     ||`<tr><td colspan="7" class="na" style="padding:20px">Nessun cliente.</td></tr>`;
@@ -2051,19 +2050,16 @@ $("fNa").onchange=e=>{ui.na=e.target.checked;render();};
 $("rows").onclick=e=>{const tr=e.target.closest("tr[data-id]");if(tr)openDrawer(+tr.dataset.id);};
 $("rows").onkeydown=e=>{if(e.key==="Enter"){const tr=e.target.closest("tr[data-id]");if(tr)openDrawer(+tr.dataset.id);}};
 
-let openId=null,showScope=false,exp=new Set(),undo=null;
+let openId=null,exp=new Set(),undo=null;
 function grow(t){t.style.height="auto";t.style.height=Math.max(t.scrollHeight+2,90)+"px";}
 function openDrawer(id){
-  if(openId!==id){showScope=false;exp=new Set();undo=null;}
+  if(openId!==id){exp=new Set();undo=null;}
   openId=id;const c=clients.find(x=>x.id===id),i=info(c),p=prog(c);
   $("dSigla").textContent=c.sigla;$("dTitle").textContent=c.nome;
-  const inScope=AREE.filter(([k])=>c.st[k]!==3);
   $("dBody").innerHTML=`<div class="ro"><span>Prossima azione</span><span class="pill ${i.cls}">${i.txt}</span></div>
   <label class="chk"><input type="checkbox" id="att" data-att="1" ${c.attiva?"checked":""}> Audit attivo${c.tipo!=="Diretto"?" ("+c.tipo.toLowerCase()+")":""}</label>
   ${c.attiva?`<fieldset><legend>Cliente</legend>
     <label class="f"><span>Incaricato</span><select id="coll" data-c="coll">${["",...PERSONE].map(x=>`<option ${c.coll===x?"selected":""}>${x}</option>`).join("")}</select></label>
-    <div class="f" style="justify-content:flex-end"><button type="button" class="lnk" data-scope="1">${showScope?"Chiudi":"Aree in scope"}</button></div>
-    ${showScope?`<div class="scope">${AREE.map(([k,l])=>`<label class="chk"><input type="checkbox" id="sc_${k}" data-sc="${k}" ${c.st[k]!==3?"checked":""}> ${k} ${l}</label>`).join("")}</div>`:""}
   </fieldset>
   <fieldset><legend>Richieste al cliente</legend>
     <div class="reqs">${c.req.map((r,j)=>{const late=!r.ok&&r.d&&days(r.d)>ATTESA_GG;return `<div class="req ${late?"late":""}">
@@ -2074,10 +2070,10 @@ function openDrawer(id){
       <button type="button" class="lnk" data-add="1">+ Nuova richiesta oggi</button></div>
   </fieldset>
   <fieldset><legend>Aree · ${p.done}/${p.tot} fatte</legend>
-    <div class="alist">${AREE.filter(([k])=>c.st[k]!==3).map(([k,l])=>{const s=eff(c,k),linked=LEGATE[k]&&c.st[k]!==3;
+    <div class="alist">${AREE.map(([k,l])=>{const s=eff(c,k),linked=LEGATE[k]&&c.st[k]!==3;
       const cm=c.cm[k]||"",open=exp.has(k);
       return `<div class="arow s${s}"><span class="k">${k}</span><button type="button" class="t tbtn" data-exp="${k}" aria-expanded="${open}">${l}${linked?`<small>segue ${LEGATE[k]}</small>`:""}${cm&&!open?`<small class="prev">${esc(cm)}</small>`:""}${!cm&&!open?`<small class="add">+ commento</small>`:""}</button>
-      ${linked?'<span class="na">—</span>':`<span class="seg2" role="group" aria-label="Stato area ${k}">${[[0,"Da fare"],[2,"Da completare"],[1,"Fatta"]].map(([v,t])=>`<button type="button" data-a="${k}" data-v="${v}" aria-pressed="${c.st[k]===v}">${t}</button>`).join("")}</span>`}
+      ${`<span class="seg2" role="group" aria-label="Stato area ${k}">${(LEGATE[k]?[[3,"N/A"]]:[[3,"N/A"],[2,"WIP"],[1,"Fatto"]]).map(([v,t])=>`<button type="button" data-a="${k}" data-v="${v}" aria-pressed="${c.st[k]===v}">${t}</button>`).join("")}</span>`}
       ${s===2&&!linked?`<input class="anote" id="nt_${k}" data-nt="${k}" value="${esc(c.nt[k]||"")}" placeholder="Cosa manca">`:""}
       ${undo&&undo.k===k?`<span class="undo">Commento eliminato · <button type="button" class="lnk" data-undo="1">Ripristina</button></span>`:""}
       ${open?`<textarea class="acom" id="cm_${k}" data-cm="${k}" rows="4" placeholder="Commenti sulle verifiche dell'area ${k}">${esc(cm)}</textarea>`:""}</div>`;}).join("")}</div>
@@ -2090,19 +2086,17 @@ const cur=()=>clients.find(x=>x.id===openId);
 function refresh(t){render();openDrawer(openId);if(t&&t.id){const a=$(t.id);if(a)a.focus();}}
 $("dBody").addEventListener("change",ev=>{const t=ev.target,c=cur();if(!c)return;
   if(t.dataset.att)c.attiva=t.checked;else if(t.dataset.note)c.note=t.value;else if(t.dataset.c)c[t.dataset.c]=t.value;
-  else if(t.dataset.sc){const k=t.dataset.sc;c.st[k]=t.checked?0:3;}
   else if(t.dataset.nt)c.nt[t.dataset.nt]=t.value;
   else if(t.dataset.cm){c.cm[t.dataset.cm]=t.value;render();return;}
   else if(t.dataset.r!==undefined){const r=c.req[+t.dataset.r];r[t.dataset.f]=t.type==="checkbox"?t.checked:t.value;}
   refresh(t);});
 $("dBody").addEventListener("click",ev=>{const c=cur();if(!c)return;const b=ev.target.closest("button");if(!b)return;
-  if(b.dataset.a){const k=b.dataset.a,v=+b.dataset.v;
+  if(b.dataset.a){const k=b.dataset.a,v=c.st[b.dataset.a]===+b.dataset.v?0:+b.dataset.v;
     if(v===1&&(c.cm[k]||c.nt[k])){undo={k,cm:c.cm[k],nt:c.nt[k],prev:c.st[k]};delete c.cm[k];exp.delete(k);} else undo=null;
     c.st[k]=v;if(v!==2)delete c.nt[k];refresh();if(v===2){const n=$("nt_"+k);if(n)n.focus();}return;}
   if(b.dataset.add){c.req.push({d:iso(TODAY),txt:"",ok:false});refresh();const n=$("rt"+(c.req.length-1));if(n)n.focus();return;}
   if(b.dataset.del!==undefined){c.req.splice(+b.dataset.del,1);refresh();return;}
   if(b.dataset.undo&&undo){c.st[undo.k]=undo.prev;if(undo.cm)c.cm[undo.k]=undo.cm;if(undo.nt)c.nt[undo.k]=undo.nt;exp.add(undo.k);undo=null;refresh();return;}
-  if(b.dataset.scope){showScope=!showScope;refresh();return;}
   if(b.dataset.exp){const k=b.dataset.exp;exp.has(k)?exp.delete(k):exp.add(k);refresh();if(exp.has(k)){const t=$("cm_"+k);if(t){t.focus();t.setSelectionRange(t.value.length,t.value.length);}}return;}
 });
 $("dBody").addEventListener("input",ev=>{const t=ev.target;if(t.dataset.cm){grow(t);const c=cur();if(c)c.cm[t.dataset.cm]=t.value;}});
@@ -3770,7 +3764,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="16/11/2026 12:20";
+const VERSIONE="16/11/2026 16:35";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
