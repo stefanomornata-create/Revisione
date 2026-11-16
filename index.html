@@ -144,6 +144,27 @@ legend{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:
 </style>
 </head>
 <body>
+<style>
+/* schermata d'accesso: copre l'app finché non si accede a Drive */
+#gAcc{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
+#gAcc[hidden]{display:none}
+#gAcc .acc{width:100%;max-width:400px;display:flex;flex-direction:column;gap:14px;text-align:center}
+#gAcc h1{font-size:44px;color:var(--accent)}
+#gAcc p{margin:0;color:var(--muted);font-size:15px}
+#gAcc .accb{background:var(--accent);color:var(--accent-fg);border:0;border-radius:10px;padding:13px 18px;font:600 15px var(--f-body);cursor:pointer}
+#gAcc .accb:disabled{opacity:.6;cursor:default}
+#gAcc .accs{background:none;border:0;color:var(--muted);font:13px var(--f-body);text-decoration:underline;cursor:pointer;align-self:center}
+#gAcc .accm{min-height:1.3em;font-size:13px}
+#gAcc .accm.err{color:var(--crit)}
+</style>
+<div id="gAcc"><div class="acc">
+  <h1>Revisione</h1>
+  <p>Accedi a Google Drive per aprire il gestionale.</p>
+  <button type="button" class="accb" id="accGo">Accedi a Google Drive</button>
+  <p class="accm" id="accMsg"></p>
+  <button type="button" class="accs" id="accSkip">Continua senza Drive</button>
+</div></div>
+<script>try{const t=JSON.parse(localStorage.getItem("revisione_token_v1")||"null");if(t&&t.t&&t.exp>Date.now()+60000)document.getElementById("gAcc").hidden=true;}catch(e){}</script>
 <script>
 // date digitate a mano: finché l'anno non è completo il browser genera valori come 0002-10-20; li ignoriamo
 ["input","change"].forEach(t=>window.addEventListener(t,ev=>{const el=ev.target;
@@ -222,13 +243,25 @@ let tok=null;try{tok=JSON.parse(localStorage.getItem(TOK)||"null");}catch(e){}
 const valid=()=>tok&&tok.t&&tok.exp>Date.now()+60000;
 let gis=null;
 function loadGis(){return gis||(gis=new Promise((ok,ko)=>{const s=document.createElement("script");s.src="https://accounts.google.com/gsi/client";s.async=true;s.onload=ok;s.onerror=()=>{gis=null;ko(new Error("Google non raggiungibile"));};document.head.appendChild(s);}));}
-APP.login=async()=>{try{await loadGis();}catch(e){status("err","Google non raggiungibile");return;}
+// ---- schermata d'accesso ----
+const acc=document.getElementById("gAcc");
+function accMsg(t,err){const m=document.getElementById("accMsg"),b=document.getElementById("accGo");
+  if(m){m.textContent=t||"";m.classList.toggle("err",!!err);}if(b)b.disabled=!!t&&!err;}
+APP.accShow=()=>{acc.hidden=false;accMsg("");loadGis().catch(()=>{});};
+APP.accHide=()=>{acc.hidden=true;};
+document.getElementById("accGo").onclick=()=>APP.login();
+document.getElementById("accSkip").onclick=()=>APP.accHide();
+APP.login=async()=>{accMsg("Accesso in corso…");
+  try{await loadGis();}catch(e){status("err","Google non raggiungibile");accMsg("Google non raggiungibile: riprova.",true);return;}
   const tc=google.accounts.oauth2.initTokenClient({client_id:CID,scope:SCOPE,callback:r=>{
-    if(r.error){status("off","Accesso non riuscito");return;}
+    if(r.error){status("off","Accesso non riuscito");accMsg("Accesso non riuscito: riprova.",true);return;}
     tok={t:r.access_token,exp:Date.now()+(r.expires_in||3600)*1000,sc:r.scope||""};try{localStorage.setItem(TOK,JSON.stringify(tok));}catch(e){}
-    APP.sync(true);}});
+    accMsg("Collegato: aggiorno i dati…");
+    APP.sync(true).finally(()=>{if(valid())APP.accHide();else accMsg("Accesso non riuscito: riprova.",true);});},
+    error_callback:()=>accMsg("Accesso annullato.",true)});
   tc.requestAccessToken({prompt:""});};
-APP.logout=()=>{tok=null;try{localStorage.removeItem(TOK);}catch(e){}status("off");};
+APP.logout=()=>{tok=null;try{localStorage.removeItem(TOK);}catch(e){}status("off");APP.accShow();};
+if(!valid())loadGis().catch(()=>{});
 let fileId=null,busy=false,again=false,lastOk=null;
 async function api(url,opt){const r=await fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:"Bearer "+tok.t},(opt||{}).headers||{})}));
   if(r.status===401||r.status===403){tok=null;try{localStorage.removeItem(TOK);}catch(e){}throw Object.assign(new Error("auth"),{auth:1});}
@@ -3737,7 +3770,7 @@ APP.sec.cruscotto={render:()=>render()};
 <script>
 (function(){
 // versione caricata: da aggiornare a ogni pubblicazione
-const VERSIONE="12/11/2026 15:30";
+const VERSIONE="16/11/2026 12:20";
 document.getElementById("gVer").textContent="Versione "+VERSIONE;
 const pad=n=>String(n).padStart(2,"0");
 const X=TODAY.getMonth()>=8?TODAY.getFullYear():TODAY.getFullYear()-1;
